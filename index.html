@@ -1,0 +1,756 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NL2 Range Viewer</title>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #070b14;
+    --surface: #0d1525;
+    --border: #1a2d4a;
+    --neon-blue: #00d4ff;
+    --neon-cyan: #00ffcc;
+    --neon-green: #39ff14;
+    --gold: #ffd700;
+    --text: #c8e0ff;
+    --text-dim: #4a6a8a;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Share Tech Mono', monospace;
+    min-height: 100vh;
+  }
+
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background-image:
+      linear-gradient(rgba(0,212,255,0.022) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,212,255,0.022) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none; z-index: 0;
+  }
+
+  .app { position: relative; z-index: 1; max-width: 1320px; margin: 0 auto; padding: 14px; }
+
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 13px 20px;
+    background: linear-gradient(135deg, rgba(0,212,255,0.07), rgba(0,255,204,0.02));
+    border: 1px solid rgba(0,212,255,0.18); border-radius: 10px; margin-bottom: 14px;
+  }
+
+  .logo {
+    font-family: 'Orbitron', sans-serif; font-weight: 900; font-size: 1.25rem;
+    background: linear-gradient(90deg, var(--neon-blue), var(--neon-cyan));
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent; letter-spacing: 3px;
+  }
+
+  .logo-sub { font-size: 0.58rem; letter-spacing: 5px; color: var(--text-dim); margin-top: 2px; }
+
+  .live-badge { display: flex; align-items: center; gap: 6px; font-size: 0.62rem; color: var(--neon-green); letter-spacing: 2px; font-family: 'Orbitron', sans-serif; }
+  .live-dot { width: 6px; height: 6px; background: var(--neon-green); border-radius: 50%; box-shadow: 0 0 8px var(--neon-green); animation: pulse 1.5s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1}50%{opacity:0.3} }
+
+  /* TAB GROUPS */
+  .tab-group-label { font-family: 'Orbitron', sans-serif; font-size: 0.5rem; letter-spacing: 3px; color: var(--text-dim); margin-bottom: 5px; text-transform: uppercase; }
+
+  .tabs-wrapper { display: flex; gap: 16px; margin-bottom: 16px; align-items: flex-end; flex-wrap: wrap; }
+
+  .tab-group { display: flex; flex-direction: column; }
+
+  .tab-row { display: flex; gap: 5px; }
+
+  .tab {
+    font-family: 'Orbitron', sans-serif; font-size: 0.58rem; letter-spacing: 1.5px;
+    padding: 8px 14px; border: 1px solid var(--border); background: var(--surface);
+    color: var(--text-dim); cursor: pointer; border-radius: 6px; transition: all 0.2s; white-space: nowrap;
+  }
+  .tab:hover { border-color: var(--neon-blue); color: var(--neon-blue); }
+  .tab.active { border-color: var(--neon-cyan); color: var(--neon-cyan); background: rgba(0,255,204,0.07); box-shadow: 0 0 12px rgba(0,255,204,0.1); }
+
+  .tab-divider { width: 1px; background: var(--border); align-self: stretch; margin: 0 4px; }
+
+  /* MAIN LAYOUT */
+  .main { display: grid; grid-template-columns: 1fr 290px; gap: 16px; align-items: start; }
+
+  .range-panel {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px;
+    position: relative; overflow: hidden;
+  }
+  .range-panel::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+    background: linear-gradient(90deg, transparent, var(--neon-blue), var(--neon-cyan), transparent);
+  }
+
+  .panel-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; flex-wrap: wrap; gap: 8px; }
+
+  .panel-title { font-family: 'Orbitron', sans-serif; font-size: 0.62rem; letter-spacing: 3px; color: var(--neon-blue); }
+
+  .position-label { font-family: 'Orbitron', sans-serif; font-size: 0.95rem; font-weight: 900; color: var(--neon-cyan); letter-spacing: 3px; text-shadow: 0 0 16px rgba(0,255,204,0.4); }
+
+  .matrix-container { overflow-x: auto; }
+  .matrix { display: grid; grid-template-columns: repeat(13, 1fr); gap: 2px; min-width: 480px; }
+
+  .cell {
+    aspect-ratio: 1; display: flex; align-items: center; justify-content: center;
+    font-size: 0.48rem; border-radius: 3px; cursor: pointer;
+    transition: transform 0.1s; border: 1px solid transparent;
+    background: rgba(255,255,255,0.02); color: var(--text-dim); user-select: none;
+  }
+  .cell:hover { transform: scale(1.2); z-index: 10; border-color: rgba(255,255,255,0.22); }
+
+  /* OR mode colors */
+  .cell.or-only   { background: rgba(255,255,255,0.06); color: var(--text); border-color: rgba(255,255,255,0.08); }
+  .cell.call-3b   { background: rgba(26,79,160,0.72); color: #7fbfff; border-color: rgba(0,120,255,0.3); box-shadow: 0 0 5px rgba(26,79,160,0.3); }
+  .cell.fourbet   { background: rgba(255,123,0,0.72); color: #ffcc88; border-color: rgba(255,123,0,0.4); box-shadow: 0 0 5px rgba(255,123,0,0.3); }
+  .cell.bluff-4b  { background: rgba(255,34,68,0.78); color: #ffaaaa; border-color: rgba(255,34,68,0.45); box-shadow: 0 0 7px rgba(255,34,68,0.35); }
+
+  /* 3BET/CC mode colors */
+  .cell.threebet  { background: rgba(210,40,60,0.8); color: #ffbbbb; border-color: rgba(220,50,70,0.5); box-shadow: 0 0 7px rgba(210,40,60,0.4); }
+  .cell.coldcall  { background: rgba(30,90,180,0.75); color: #88c0ff; border-color: rgba(40,110,220,0.4); box-shadow: 0 0 5px rgba(30,90,180,0.35); }
+
+  /* Pair base override */
+  .cell.pair { background: rgba(255,215,0,0.07); color: var(--gold); border-color: rgba(255,215,0,0.12); }
+  .cell.pair.or-only,.cell.pair.call-3b,.cell.pair.fourbet,.cell.pair.bluff-4b,
+  .cell.pair.threebet,.cell.pair.coldcall { background: inherit; color: inherit; }
+  .cell.pair.or-only   { background: rgba(255,255,255,0.06); color: var(--text); }
+  .cell.pair.call-3b   { background: rgba(26,79,160,0.72); color: #7fbfff; }
+  .cell.pair.fourbet   { background: rgba(255,123,0,0.72); color: #ffcc88; }
+  .cell.pair.bluff-4b  { background: rgba(255,34,68,0.78); color: #ffaaaa; }
+  .cell.pair.threebet  { background: rgba(210,40,60,0.8); color: #ffbbbb; }
+  .cell.pair.coldcall  { background: rgba(30,90,180,0.75); color: #88c0ff; }
+
+  .legend { display: flex; gap: 12px; margin-top: 10px; flex-wrap: wrap; }
+  .legend-item { display: flex; align-items: center; gap: 5px; font-size: 0.52rem; letter-spacing: 1px; color: var(--text-dim); }
+  .legend-dot { width: 9px; height: 9px; border-radius: 2px; }
+
+  /* SIDEBAR */
+  .sidebar { display: flex; flex-direction: column; gap: 12px; }
+
+  .info-card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 13px;
+    position: relative; overflow: hidden;
+  }
+  .info-card::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 1px;
+    background: linear-gradient(90deg, transparent, var(--neon-cyan), transparent);
+  }
+
+  .card-title { font-family: 'Orbitron', sans-serif; font-size: 0.52rem; letter-spacing: 3px; color: var(--text-dim); margin-bottom: 9px; text-transform: uppercase; }
+
+  .position-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
+
+  .pos-btn {
+    font-family: 'Orbitron', sans-serif; font-size: 0.6rem; font-weight: 700; letter-spacing: 1px;
+    padding: 9px 4px; border: 1px solid var(--border); background: rgba(255,255,255,0.02);
+    color: var(--text-dim); cursor: pointer; border-radius: 5px; transition: all 0.2s; text-align: center;
+  }
+  .pos-btn:hover { border-color: var(--neon-blue); color: var(--neon-blue); }
+  .pos-btn.active { border-color: var(--neon-cyan); color: #070b14; background: var(--neon-cyan); box-shadow: 0 0 12px rgba(0,255,204,0.3); }
+  .pos-btn:disabled { opacity: 0.25; cursor: not-allowed; border-color: var(--border); color: var(--text-dim); background: transparent; box-shadow: none; }
+
+  .hand-info {
+    background: rgba(0,0,0,0.4); border: 1px solid rgba(0,255,204,0.18); border-radius: 7px; padding: 11px;
+    min-height: 72px; display: flex; align-items: center; justify-content: center;
+    text-align: center; flex-direction: column; gap: 5px;
+  }
+  .hand-name { font-family: 'Orbitron', sans-serif; font-size: 1.05rem; font-weight: 700; color: var(--neon-cyan); }
+  .hand-action { font-size: 0.62rem; letter-spacing: 2px; padding: 3px 10px; border-radius: 20px; }
+  .hand-action.call-3b { background: rgba(26,79,160,0.4); color: #7fbfff; border: 1px solid #1a4fa0; }
+  .hand-action.fourbet { background: rgba(255,123,0,0.4); color: #ffcc88; border: 1px solid #ff7b00; }
+  .hand-action.bluff-4b { background: rgba(255,34,68,0.4); color: #ffaaaa; border: 1px solid #ff2244; }
+  .hand-action.threebet { background: rgba(210,40,60,0.4); color: #ffbbbb; border: 1px solid rgba(220,50,70,0.7); }
+  .hand-action.coldcall { background: rgba(30,90,180,0.4); color: #88c0ff; border: 1px solid rgba(40,110,220,0.6); }
+  .hand-action.fold { background: rgba(255,255,255,0.04); color: var(--text-dim); border: 1px solid var(--border); }
+  .hand-action.or-only { background: rgba(255,255,255,0.05); color: var(--text); border: 1px solid rgba(255,255,255,0.1); }
+
+  .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .stat-block { background: rgba(0,0,0,0.3); border: 1px solid var(--border); border-radius: 7px; padding: 8px; text-align: center; }
+  .stat-number { font-family: 'Orbitron', sans-serif; font-size: 1.15rem; font-weight: 700; color: var(--neon-cyan); text-shadow: 0 0 10px rgba(0,255,204,0.3); }
+  .stat-label { font-size: 0.48rem; letter-spacing: 1px; color: var(--text-dim); margin-top: 2px; }
+
+  .filter-row { display: flex; gap: 5px; flex-wrap: wrap; }
+  .filter-btn { font-size: 0.58rem; padding: 5px 9px; border-radius: 20px; border: 1px solid transparent; cursor: pointer; transition: all 0.2s; letter-spacing: 1px; }
+  .filter-btn[data-type="call-3b"] { border-color: #1a4fa0; color: #7fbfff; background: rgba(26,79,160,0.12); }
+  .filter-btn[data-type="fourbet"] { border-color: #ff7b00; color: #ffcc88; background: rgba(255,123,0,0.12); }
+  .filter-btn[data-type="bluff-4b"] { border-color: #ff2244; color: #ffaaaa; background: rgba(255,34,68,0.12); }
+  .filter-btn[data-type="threebet"] { border-color: rgba(210,40,60,0.8); color: #ffbbbb; background: rgba(210,40,60,0.12); }
+  .filter-btn[data-type="coldcall"] { border-color: rgba(30,90,180,0.8); color: #88c0ff; background: rgba(30,90,180,0.12); }
+  .filter-btn[data-type="or"] { border-color: var(--border); color: var(--text); background: rgba(255,255,255,0.04); }
+  .filter-btn.off { opacity: 0.25; }
+
+  @media (max-width: 860px) { .main { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div>
+      <div class="logo">RANGE VIEWER</div>
+      <div class="logo-sub">NL2 · TEXAS HOLD'EM · GTO</div>
+    </div>
+    <div class="live-badge"><div class="live-dot"></div>SESSION ACTIVE</div>
+  </header>
+
+  <div class="tabs-wrapper">
+    <div class="tab-group">
+      <div class="tab-group-label">Open Raise</div>
+      <div class="tab-row">
+        <button class="tab active" data-mode="OR" data-sub="OR">OPEN RAISE</button>
+      </div>
+    </div>
+    <div class="tab-divider"></div>
+    <div class="tab-group">
+      <div class="tab-group-label">3Bet &amp; Cold Call</div>
+      <div class="tab-row">
+        <button class="tab" data-mode="3BET" data-sub="vsUTGMP">vs UTG-MP</button>
+        <button class="tab" data-mode="3BET" data-sub="vsCOBU">vs CO-BU</button>
+        <button class="tab" data-mode="3BET" data-sub="BBvsUTGMP">BB vs UTG-MP</button>
+        <button class="tab" data-mode="3BET" data-sub="BBvsCOBUSB">BB vs CO-BU-SB</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="main">
+    <div class="range-panel">
+      <div class="panel-header">
+        <span class="panel-title" id="panel-subtitle">OPEN RAISE RANGE</span>
+        <span class="position-label" id="position-display">UTG</span>
+      </div>
+      <div class="matrix-container">
+        <div class="matrix" id="matrix"></div>
+      </div>
+      <div class="legend" id="legend"></div>
+    </div>
+
+    <div class="sidebar">
+      <div class="info-card">
+        <div class="card-title" id="pos-card-title">Posición</div>
+        <div class="position-grid" id="pos-grid"></div>
+      </div>
+      <div class="info-card">
+        <div class="card-title">Mano</div>
+        <div class="hand-info" id="hand-info">
+          <div style="color:var(--text-dim);font-size:0.58rem;letter-spacing:2px">HOVER SOBRE UNA MANO</div>
+        </div>
+      </div>
+      <div class="info-card">
+        <div class="card-title">Estadísticas</div>
+        <div class="stats-grid" id="stats-grid"></div>
+      </div>
+      <div class="info-card">
+        <div class="card-title">Filtros</div>
+        <div class="filter-row" id="filter-row"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const RANKS = ['A','K','Q','J','T','9','8','7','6','5','4','3','2'];
+
+// ─── OR RANGES ───────────────────────────────────────────────────────────────
+// States: 'or'=open only, 'call-3b'=call 3bet, '4bet'=4bet value, 'bluff-4b'=4bet bluff
+const OR_RANGES = {
+  UTG: {
+    'AA':'4bet','KK':'4bet','QQ':'4bet','JJ':'call-3b','TT':'call-3b','99':'call-3b','88':'or','77':'or','66':'or','55':'or','44':'','33':'','22':'',
+    'AKs':'4bet','AQs':'4bet','AJs':'call-3b','ATs':'call-3b','A9s':'or','A8s':'or','A7s':'or','A6s':'or','A5s':'call-3b','A4s':'or','A3s':'','A2s':'',
+    'KQs':'call-3b','KJs':'call-3b','KTs':'or','K9s':'','K8s':'','K7s':'','K6s':'','K5s':'','K4s':'','K3s':'','K2s':'',
+    'QJs':'call-3b','QTs':'or','Q9s':'','Q8s':'','Q7s':'','Q6s':'','Q5s':'','Q4s':'','Q3s':'','Q2s':'',
+    'JTs':'or','J9s':'','J8s':'','J7s':'','J6s':'','J5s':'','J4s':'','J3s':'','J2s':'',
+    'T9s':'or','T8s':'','T7s':'','T6s':'','T5s':'','T4s':'','T3s':'','T2s':'',
+    '98s':'or','97s':'','96s':'','95s':'','94s':'','93s':'','92s':'',
+    '87s':'or','86s':'','85s':'','84s':'','83s':'','82s':'',
+    '76s':'or','75s':'','74s':'','73s':'','72s':'',
+    '65s':'or','64s':'','63s':'','62s':'',
+    '54s':'or','53s':'','52s':'','43s':'','42s':'','32s':'',
+    'AKo':'call-3b','AQo':'call-3b','AJo':'call-3b','ATo':'or','A9o':'','A8o':'','A7o':'','A6o':'','A5o':'','A4o':'','A3o':'','A2o':'',
+    'KQo':'or','KJo':'','KTo':'','K9o':'','K8o':'','K7o':'','K6o':'','K5o':'','K4o':'','K3o':'','K2o':'',
+    'QJo':'','QTo':'','Q9o':'','Q8o':'','Q7o':'','Q6o':'','Q5o':'','Q4o':'','Q3o':'','Q2o':'',
+    'JTo':'','J9o':'','J8o':'','J7o':'','J6o':'','J5o':'','J4o':'','J3o':'','J2o':'',
+    'T9o':'','T8o':'','T7o':'','T6o':'','T5o':'','T4o':'','T3o':'','T2o':'',
+    '98o':'','97o':'','96o':'','95o':'','94o':'','93o':'','92o':'',
+    '87o':'','86o':'','85o':'','84o':'','83o':'','82o':'',
+    '76o':'','75o':'','74o':'','73o':'','72o':'',
+    '65o':'','64o':'','63o':'','62o':'',
+    '54o':'','53o':'','52o':'','43o':'','42o':'','32o':'',
+  },
+  MP: {
+    'AA':'4bet','KK':'4bet','QQ':'4bet','JJ':'call-3b','TT':'call-3b','99':'call-3b','88':'or','77':'or','66':'or','55':'or','44':'','33':'','22':'',
+    'AKs':'4bet','AQs':'4bet','AJs':'call-3b','ATs':'call-3b','A9s':'or','A8s':'or','A7s':'or','A6s':'or','A5s':'call-3b','A4s':'or','A3s':'or','A2s':'',
+    'KQs':'call-3b','KJs':'call-3b','KTs':'or','K9s':'or','K8s':'','K7s':'','K6s':'','K5s':'','K4s':'','K3s':'','K2s':'',
+    'QJs':'call-3b','QTs':'or','Q9s':'or','Q8s':'','Q7s':'','Q6s':'','Q5s':'','Q4s':'','Q3s':'','Q2s':'',
+    'JTs':'or','J9s':'or','J8s':'','J7s':'','J6s':'','J5s':'','J4s':'','J3s':'','J2s':'',
+    'T9s':'or','T8s':'or','T7s':'','T6s':'','T5s':'','T4s':'','T3s':'','T2s':'',
+    '98s':'or','97s':'or','96s':'','95s':'','94s':'','93s':'','92s':'',
+    '87s':'or','86s':'or','85s':'','84s':'','83s':'','82s':'',
+    '76s':'or','75s':'or','74s':'','73s':'','72s':'',
+    '65s':'or','64s':'or','63s':'','62s':'',
+    '54s':'or','53s':'or','52s':'','43s':'or','42s':'','32s':'',
+    'AKo':'call-3b','AQo':'call-3b','AJo':'call-3b','ATo':'or','A9o':'','A8o':'','A7o':'','A6o':'','A5o':'','A4o':'','A3o':'','A2o':'',
+    'KQo':'call-3b','KJo':'or','KTo':'','K9o':'','K8o':'','K7o':'','K6o':'','K5o':'','K4o':'','K3o':'','K2o':'',
+    'QJo':'or','QTo':'or','Q9o':'','Q8o':'','Q7o':'','Q6o':'','Q5o':'','Q4o':'','Q3o':'','Q2o':'',
+    'JTo':'or','J9o':'','J8o':'','J7o':'','J6o':'','J5o':'','J4o':'','J3o':'','J2o':'',
+    'T9o':'','T8o':'','T7o':'','T6o':'','T5o':'','T4o':'','T3o':'','T2o':'',
+    '98o':'','97o':'','96o':'','95o':'','94o':'','93o':'','92o':'',
+    '87o':'','86o':'','85o':'','84o':'','83o':'','82o':'',
+    '76o':'','75o':'','74o':'','73o':'','72o':'',
+    '65o':'','64o':'','63o':'','62o':'',
+    '54o':'','53o':'','52o':'','43o':'','42o':'','32o':'',
+  },
+  CO: {
+    'AA':'4bet','KK':'4bet','QQ':'4bet','JJ':'call-3b','TT':'call-3b','99':'call-3b','88':'or','77':'or','66':'or','55':'or','44':'or','33':'or','22':'or',
+    'AKs':'4bet','AQs':'4bet','AJs':'call-3b','ATs':'call-3b','A9s':'call-3b','A8s':'or','A7s':'or','A6s':'or','A5s':'call-3b','A4s':'or','A3s':'or','A2s':'or',
+    'KQs':'call-3b','KJs':'call-3b','KTs':'call-3b','K9s':'or','K8s':'or','K7s':'or','K6s':'or','K5s':'or','K4s':'','K3s':'','K2s':'',
+    'QJs':'call-3b','QTs':'call-3b','Q9s':'or','Q8s':'or','Q7s':'or','Q6s':'','Q5s':'','Q4s':'','Q3s':'','Q2s':'',
+    'JTs':'call-3b','J9s':'or','J8s':'or','J7s':'','J6s':'','J5s':'','J4s':'','J3s':'','J2s':'',
+    'T9s':'or','T8s':'or','T7s':'or','T6s':'','T5s':'','T4s':'','T3s':'','T2s':'',
+    '98s':'or','97s':'or','96s':'or','95s':'','94s':'','93s':'','92s':'',
+    '87s':'or','86s':'or','85s':'or','84s':'','83s':'','82s':'',
+    '76s':'or','75s':'or','74s':'or','73s':'','72s':'',
+    '65s':'or','64s':'or','63s':'or','62s':'',
+    '54s':'or','53s':'or','52s':'','43s':'or','42s':'','32s':'or',
+    'AKo':'call-3b','AQo':'call-3b','AJo':'call-3b','ATo':'call-3b','A9o':'or','A8o':'or','A7o':'','A6o':'','A5o':'','A4o':'','A3o':'','A2o':'',
+    'KQo':'call-3b','KJo':'or','KTo':'or','K9o':'','K8o':'','K7o':'','K6o':'','K5o':'','K4o':'','K3o':'','K2o':'',
+    'QJo':'or','QTo':'or','Q9o':'or','Q8o':'','Q7o':'','Q6o':'','Q5o':'','Q4o':'','Q3o':'','Q2o':'',
+    'JTo':'or','J9o':'or','J8o':'','J7o':'','J6o':'','J5o':'','J4o':'','J3o':'','J2o':'',
+    'T9o':'or','T8o':'','T7o':'','T6o':'','T5o':'','T4o':'','T3o':'','T2o':'',
+    '98o':'','97o':'','96o':'','95o':'','94o':'','93o':'','92o':'',
+    '87o':'','86o':'','85o':'','84o':'','83o':'','82o':'',
+    '76o':'','75o':'','74o':'','73o':'','72o':'',
+    '65o':'','64o':'','63o':'','62o':'',
+    '54o':'','53o':'','52o':'','43o':'','42o':'','32o':'',
+  },
+  BU: {
+    'AA':'4bet','KK':'4bet','QQ':'4bet','JJ':'call-3b','TT':'call-3b','99':'call-3b','88':'or','77':'or','66':'or','55':'or','44':'or','33':'or','22':'or',
+    'AKs':'4bet','AQs':'4bet','AJs':'call-3b','ATs':'call-3b','A9s':'call-3b','A8s':'call-3b','A7s':'or','A6s':'or','A5s':'call-3b','A4s':'or','A3s':'or','A2s':'or',
+    'KQs':'call-3b','KJs':'call-3b','KTs':'call-3b','K9s':'call-3b','K8s':'or','K7s':'or','K6s':'or','K5s':'or','K4s':'or','K3s':'or','K2s':'or',
+    'QJs':'call-3b','QTs':'call-3b','Q9s':'call-3b','Q8s':'or','Q7s':'or','Q6s':'or','Q5s':'or','Q4s':'or','Q3s':'','Q2s':'',
+    'JTs':'call-3b','J9s':'or','J8s':'or','J7s':'or','J6s':'or','J5s':'','J4s':'','J3s':'','J2s':'',
+    'T9s':'or','T8s':'or','T7s':'or','T6s':'or','T5s':'','T4s':'','T3s':'','T2s':'',
+    '98s':'or','97s':'or','96s':'or','95s':'or','94s':'','93s':'','92s':'',
+    '87s':'or','86s':'or','85s':'or','84s':'or','83s':'','82s':'',
+    '76s':'or','75s':'or','74s':'or','73s':'or','72s':'',
+    '65s':'or','64s':'or','63s':'or','62s':'',
+    '54s':'or','53s':'or','52s':'or','43s':'or','42s':'','32s':'or',
+    'AKo':'call-3b','AQo':'call-3b','AJo':'call-3b','ATo':'call-3b','A9o':'call-3b','A8o':'or','A7o':'or','A6o':'or','A5o':'or','A4o':'or','A3o':'','A2o':'',
+    'KQo':'call-3b','KJo':'call-3b','KTo':'or','K9o':'or','K8o':'','K7o':'','K6o':'','K5o':'','K4o':'','K3o':'','K2o':'',
+    'QJo':'call-3b','QTo':'or','Q9o':'or','Q8o':'or','Q7o':'','Q6o':'','Q5o':'','Q4o':'','Q3o':'','Q2o':'',
+    'JTo':'or','J9o':'or','J8o':'or','J7o':'','J6o':'','J5o':'','J4o':'','J3o':'','J2o':'',
+    'T9o':'or','T8o':'or','T7o':'','T6o':'','T5o':'','T4o':'','T3o':'','T2o':'',
+    '98o':'or','97o':'','96o':'','95o':'','94o':'','93o':'','92o':'',
+    '87o':'or','86o':'','85o':'','84o':'','83o':'','82o':'',
+    '76o':'or','75o':'','74o':'','73o':'','72o':'',
+    '65o':'or','64o':'','63o':'','62o':'',
+    '54o':'or','53o':'','52o':'','43o':'','42o':'','32o':'',
+  },
+  SB: {
+    'AA':'4bet','KK':'4bet','QQ':'4bet','JJ':'call-3b','TT':'call-3b','99':'call-3b','88':'or','77':'or','66':'or','55':'or','44':'or','33':'or','22':'or',
+    'AKs':'4bet','AQs':'4bet','AJs':'4bet','ATs':'call-3b','A9s':'call-3b','A8s':'call-3b','A7s':'call-3b','A6s':'or','A5s':'bluff-4b','A4s':'or','A3s':'or','A2s':'or',
+    'KQs':'call-3b','KJs':'call-3b','KTs':'call-3b','K9s':'or','K8s':'or','K7s':'or','K6s':'or','K5s':'or','K4s':'or','K3s':'or','K2s':'or',
+    'QJs':'call-3b','QTs':'call-3b','Q9s':'or','Q8s':'or','Q7s':'or','Q6s':'or','Q5s':'or','Q4s':'or','Q3s':'or','Q2s':'',
+    'JTs':'call-3b','J9s':'or','J8s':'or','J7s':'or','J6s':'or','J5s':'or','J4s':'','J3s':'','J2s':'',
+    'T9s':'or','T8s':'or','T7s':'or','T6s':'or','T5s':'or','T4s':'','T3s':'','T2s':'',
+    '98s':'or','97s':'or','96s':'or','95s':'or','94s':'or','93s':'','92s':'',
+    '87s':'or','86s':'or','85s':'or','84s':'or','83s':'','82s':'',
+    '76s':'or','75s':'or','74s':'or','73s':'or','72s':'',
+    '65s':'or','64s':'or','63s':'or','62s':'',
+    '54s':'or','53s':'or','52s':'or','43s':'or','42s':'or','32s':'or',
+    'AKo':'4bet','AQo':'call-3b','AJo':'call-3b','ATo':'call-3b','A9o':'or','A8o':'or','A7o':'or','A6o':'or','A5o':'or','A4o':'or','A3o':'or','A2o':'or',
+    'KQo':'call-3b','KJo':'call-3b','KTo':'call-3b','K9o':'or','K8o':'or','K7o':'or','K6o':'or','K5o':'or','K4o':'','K3o':'','K2o':'',
+    'QJo':'call-3b','QTo':'or','Q9o':'or','Q8o':'or','Q7o':'or','Q6o':'','Q5o':'','Q4o':'','Q3o':'','Q2o':'',
+    'JTo':'or','J9o':'or','J8o':'or','J7o':'or','J6o':'','J5o':'','J4o':'','J3o':'','J2o':'',
+    'T9o':'or','T8o':'or','T7o':'or','T6o':'','T5o':'','T4o':'','T3o':'','T2o':'',
+    '98o':'or','97o':'or','96o':'','95o':'','94o':'','93o':'','92o':'',
+    '87o':'or','86o':'or','85o':'','84o':'','83o':'','82o':'',
+    '76o':'or','75o':'or','74o':'','73o':'','72o':'',
+    '65o':'or','64o':'or','63o':'','62o':'',
+    '54o':'or','53o':'','52o':'','43o':'or','42o':'','32o':'or',
+  },
+};
+
+// ─── 3BET / COLD CALL RANGES ─────────────────────────────────────────────────
+// States: 'threebet' = 3bet (red), 'coldcall' = cold call (blue)
+// Read directly from the image: upper-left quadrant = vs UTG-MP, upper-right = vs CO-BU
+//                                lower-left = BB vs UTG-MP, lower-right = BB vs CO-BU-SB
+
+const THREEBET_RANGES = {
+
+  // ── vs UTG-MP (SB/BTN position, top-left chart) ──────────────────────────
+  vsUTGMP: {
+    // Pairs
+    'AA':'threebet','KK':'threebet','QQ':'threebet','JJ':'threebet','TT':'coldcall','99':'coldcall','88':'coldcall','77':'coldcall','66':'coldcall','55':'coldcall','44':'','33':'','22':'',
+    // AX suited
+    'AKs':'threebet','AQs':'threebet','AJs':'coldcall','ATs':'coldcall','A9s':'','A8s':'','A7s':'','A6s':'','A5s':'threebet','A4s':'threebet','A3s':'threebet','A2s':'',
+    // KX suited
+    'KQs':'coldcall','KJs':'coldcall','KTs':'coldcall','K9s':'','K8s':'','K7s':'','K6s':'','K5s':'','K4s':'','K3s':'','K2s':'',
+    // QX suited
+    'QJs':'coldcall','QTs':'coldcall','Q9s':'','Q8s':'','Q7s':'','Q6s':'','Q5s':'','Q4s':'','Q3s':'','Q2s':'',
+    // JX suited
+    'JTs':'coldcall','J9s':'','J8s':'','J7s':'','J6s':'','J5s':'','J4s':'','J3s':'','J2s':'',
+    // TX suited
+    'T9s':'coldcall','T8s':'','T7s':'','T6s':'','T5s':'','T4s':'','T3s':'','T2s':'',
+    // 9X suited
+    '98s':'coldcall','97s':'','96s':'','95s':'','94s':'','93s':'','92s':'',
+    // lower suited — mostly fold vs UTG-MP
+    '87s':'','86s':'','85s':'','84s':'','83s':'','82s':'',
+    '76s':'','75s':'','74s':'','73s':'','72s':'',
+    '65s':'','64s':'','63s':'','62s':'',
+    '54s':'','53s':'','52s':'','43s':'','42s':'','32s':'',
+    // AX offsuit
+    'AKo':'threebet','AQo':'threebet','AJo':'coldcall','ATo':'coldcall','A9o':'','A8o':'','A7o':'','A6o':'','A5o':'','A4o':'','A3o':'','A2o':'',
+    // KX offsuit
+    'KQo':'coldcall','KJo':'','KTo':'','K9o':'','K8o':'','K7o':'','K6o':'','K5o':'','K4o':'','K3o':'','K2o':'',
+    // QX offsuit
+    'QJo':'','QTo':'','Q9o':'','Q8o':'','Q7o':'','Q6o':'','Q5o':'','Q4o':'','Q3o':'','Q2o':'',
+    'JTo':'','J9o':'','J8o':'','J7o':'','J6o':'','J5o':'','J4o':'','J3o':'','J2o':'',
+    'T9o':'','T8o':'','T7o':'','T6o':'','T5o':'','T4o':'','T3o':'','T2o':'',
+    '98o':'','97o':'','96o':'','95o':'','94o':'','93o':'','92o':'',
+    '87o':'','86o':'','85o':'','84o':'','83o':'','82o':'',
+    '76o':'','75o':'','74o':'','73o':'','72o':'',
+    '65o':'','64o':'','63o':'','62o':'',
+    '54o':'','53o':'','52o':'','43o':'','42o':'','32o':'',
+  },
+
+  // ── vs CO-BU (top-right chart) ────────────────────────────────────────────
+  vsCOBU: {
+    'AA':'threebet','KK':'threebet','QQ':'threebet','JJ':'threebet','TT':'threebet','99':'coldcall','88':'coldcall','77':'coldcall','66':'coldcall','55':'coldcall','44':'coldcall','33':'','22':'',
+    'AKs':'threebet','AQs':'threebet','AJs':'threebet','ATs':'coldcall','A9s':'coldcall','A8s':'','A7s':'','A6s':'','A5s':'threebet','A4s':'threebet','A3s':'threebet','A2s':'threebet',
+    'KQs':'coldcall','KJs':'coldcall','KTs':'coldcall','K9s':'coldcall','K8s':'','K7s':'','K6s':'','K5s':'','K4s':'','K3s':'','K2s':'',
+    'QJs':'coldcall','QTs':'coldcall','Q9s':'coldcall','Q8s':'','Q7s':'','Q6s':'','Q5s':'','Q4s':'','Q3s':'','Q2s':'',
+    'JTs':'coldcall','J9s':'coldcall','J8s':'','J7s':'','J6s':'','J5s':'','J4s':'','J3s':'','J2s':'',
+    'T9s':'coldcall','T8s':'coldcall','T7s':'','T6s':'','T5s':'','T4s':'','T3s':'','T2s':'',
+    '98s':'coldcall','97s':'','96s':'','95s':'','94s':'','93s':'','92s':'',
+    '87s':'coldcall','86s':'','85s':'','84s':'','83s':'','82s':'',
+    '76s':'','75s':'','74s':'','73s':'','72s':'',
+    '65s':'','64s':'','63s':'','62s':'',
+    '54s':'','53s':'','52s':'','43s':'','42s':'','32s':'',
+    'AKo':'threebet','AQo':'threebet','AJo':'threebet','ATo':'coldcall','A9o':'coldcall','A8o':'','A7o':'','A6o':'','A5o':'','A4o':'','A3o':'','A2o':'',
+    'KQo':'coldcall','KJo':'coldcall','KTo':'coldcall','K9o':'','K8o':'','K7o':'','K6o':'','K5o':'','K4o':'','K3o':'','K2o':'',
+    'QJo':'coldcall','QTo':'','Q9o':'','Q8o':'','Q7o':'','Q6o':'','Q5o':'','Q4o':'','Q3o':'','Q2o':'',
+    'JTo':'coldcall','J9o':'','J8o':'','J7o':'','J6o':'','J5o':'','J4o':'','J3o':'','J2o':'',
+    'T9o':'','T8o':'','T7o':'','T6o':'','T5o':'','T4o':'','T3o':'','T2o':'',
+    '98o':'','97o':'','96o':'','95o':'','94o':'','93o':'','92o':'',
+    '87o':'','86o':'','85o':'','84o':'','83o':'','82o':'',
+    '76o':'','75o':'','74o':'','73o':'','72o':'',
+    '65o':'','64o':'','63o':'','62o':'',
+    '54o':'','53o':'','52o':'','43o':'','42o':'','32o':'',
+  },
+
+  // ── BB vs UTG-MP (bottom-left chart) ─────────────────────────────────────
+  BBvsUTGMP: {
+    'AA':'threebet','KK':'threebet','QQ':'threebet','JJ':'threebet','TT':'coldcall','99':'coldcall','88':'coldcall','77':'coldcall','66':'coldcall','55':'coldcall','44':'coldcall','33':'coldcall','22':'coldcall',
+    'AKs':'threebet','AQs':'threebet','AJs':'threebet','ATs':'coldcall','A9s':'coldcall','A8s':'coldcall','A7s':'coldcall','A6s':'coldcall','A5s':'threebet','A4s':'coldcall','A3s':'coldcall','A2s':'coldcall',
+    'KQs':'coldcall','KJs':'coldcall','KTs':'coldcall','K9s':'coldcall','K8s':'coldcall','K7s':'coldcall','K6s':'coldcall','K5s':'coldcall','K4s':'coldcall','K3s':'coldcall','K2s':'coldcall',
+    'QJs':'coldcall','QTs':'coldcall','Q9s':'coldcall','Q8s':'coldcall','Q7s':'coldcall','Q6s':'coldcall','Q5s':'coldcall','Q4s':'coldcall','Q3s':'coldcall','Q2s':'coldcall',
+    'JTs':'coldcall','J9s':'coldcall','J8s':'coldcall','J7s':'coldcall','J6s':'coldcall','J5s':'coldcall','J4s':'','J3s':'','J2s':'',
+    'T9s':'coldcall','T8s':'coldcall','T7s':'coldcall','T6s':'coldcall','T5s':'coldcall','T4s':'','T3s':'','T2s':'',
+    '98s':'coldcall','97s':'coldcall','96s':'coldcall','95s':'coldcall','94s':'','93s':'','92s':'',
+    '87s':'coldcall','86s':'coldcall','85s':'coldcall','84s':'','83s':'','82s':'',
+    '76s':'coldcall','75s':'coldcall','74s':'','73s':'','72s':'',
+    '65s':'coldcall','64s':'coldcall','63s':'','62s':'',
+    '54s':'coldcall','53s':'','52s':'','43s':'','42s':'','32s':'',
+    'AKo':'threebet','AQo':'threebet','AJo':'coldcall','ATo':'coldcall','A9o':'coldcall','A8o':'coldcall','A7o':'coldcall','A6o':'coldcall','A5o':'coldcall','A4o':'coldcall','A3o':'coldcall','A2o':'coldcall',
+    'KQo':'coldcall','KJo':'coldcall','KTo':'coldcall','K9o':'coldcall','K8o':'coldcall','K7o':'','K6o':'','K5o':'','K4o':'','K3o':'','K2o':'',
+    'QJo':'coldcall','QTo':'coldcall','Q9o':'coldcall','Q8o':'coldcall','Q7o':'','Q6o':'','Q5o':'','Q4o':'','Q3o':'','Q2o':'',
+    'JTo':'coldcall','J9o':'coldcall','J8o':'coldcall','J7o':'','J6o':'','J5o':'','J4o':'','J3o':'','J2o':'',
+    'T9o':'coldcall','T8o':'coldcall','T7o':'','T6o':'','T5o':'','T4o':'','T3o':'','T2o':'',
+    '98o':'coldcall','97o':'','96o':'','95o':'','94o':'','93o':'','92o':'',
+    '87o':'','86o':'','85o':'','84o':'','83o':'','82o':'',
+    '76o':'','75o':'','74o':'','73o':'','72o':'',
+    '65o':'','64o':'','63o':'','62o':'',
+    '54o':'','53o':'','52o':'','43o':'','42o':'','32o':'',
+  },
+
+  // ── BB vs CO-BU-SB (bottom-right chart) ───────────────────────────────────
+  BBvsCOBUSB: {
+    'AA':'threebet','KK':'threebet','QQ':'threebet','JJ':'threebet','TT':'threebet','99':'coldcall','88':'coldcall','77':'coldcall','66':'coldcall','55':'coldcall','44':'coldcall','33':'coldcall','22':'coldcall',
+    'AKs':'threebet','AQs':'threebet','AJs':'threebet','ATs':'threebet','A9s':'coldcall','A8s':'coldcall','A7s':'coldcall','A6s':'coldcall','A5s':'threebet','A4s':'coldcall','A3s':'coldcall','A2s':'coldcall',
+    'KQs':'threebet','KJs':'coldcall','KTs':'coldcall','K9s':'coldcall','K8s':'coldcall','K7s':'coldcall','K6s':'coldcall','K5s':'coldcall','K4s':'coldcall','K3s':'coldcall','K2s':'coldcall',
+    'QJs':'coldcall','QTs':'coldcall','Q9s':'coldcall','Q8s':'coldcall','Q7s':'coldcall','Q6s':'coldcall','Q5s':'coldcall','Q4s':'coldcall','Q3s':'coldcall','Q2s':'coldcall',
+    'JTs':'coldcall','J9s':'coldcall','J8s':'coldcall','J7s':'coldcall','J6s':'coldcall','J5s':'coldcall','J4s':'coldcall','J3s':'','J2s':'',
+    'T9s':'coldcall','T8s':'coldcall','T7s':'coldcall','T6s':'coldcall','T5s':'coldcall','T4s':'coldcall','T3s':'','T2s':'',
+    '98s':'coldcall','97s':'coldcall','96s':'coldcall','95s':'coldcall','94s':'coldcall','93s':'','92s':'',
+    '87s':'coldcall','86s':'coldcall','85s':'coldcall','84s':'coldcall','83s':'','82s':'',
+    '76s':'coldcall','75s':'coldcall','74s':'coldcall','73s':'','72s':'',
+    '65s':'coldcall','64s':'coldcall','63s':'coldcall','62s':'',
+    '54s':'coldcall','53s':'coldcall','52s':'','43s':'coldcall','42s':'','32s':'',
+    'AKo':'threebet','AQo':'threebet','AJo':'threebet','ATo':'coldcall','A9o':'coldcall','A8o':'coldcall','A7o':'coldcall','A6o':'coldcall','A5o':'coldcall','A4o':'coldcall','A3o':'coldcall','A2o':'coldcall',
+    'KQo':'threebet','KJo':'coldcall','KTo':'coldcall','K9o':'coldcall','K8o':'coldcall','K7o':'coldcall','K6o':'coldcall','K5o':'','K4o':'','K3o':'','K2o':'',
+    'QJo':'coldcall','QTo':'coldcall','Q9o':'coldcall','Q8o':'coldcall','Q7o':'coldcall','Q6o':'','Q5o':'','Q4o':'','Q3o':'','Q2o':'',
+    'JTo':'coldcall','J9o':'coldcall','J8o':'coldcall','J7o':'coldcall','J6o':'','J5o':'','J4o':'','J3o':'','J2o':'',
+    'T9o':'coldcall','T8o':'coldcall','T7o':'coldcall','T6o':'','T5o':'','T4o':'','T3o':'','T2o':'',
+    '98o':'coldcall','97o':'coldcall','96o':'','95o':'','94o':'','93o':'','92o':'',
+    '87o':'coldcall','86o':'','85o':'','84o':'','83o':'','82o':'',
+    '76o':'coldcall','75o':'','74o':'','73o':'','72o':'',
+    '65o':'coldcall','64o':'','63o':'','62o':'',
+    '54o':'','53o':'','52o':'','43o':'','42o':'','32o':'',
+  },
+};
+
+// ─── CONFIG PER MODE ─────────────────────────────────────────────────────────
+const MODE_CONFIG = {
+  OR: {
+    positions: ['UTG','MP','CO','BU','SB'],
+    posLabel: 'Posición de apertura',
+    defaultPos: 'UTG',
+    statLabels: ['COMBOS OR','CALL 3BET','4BET VALUE','4BET BLUFF'],
+    statKeys: ['or','call-3b','4bet','bluff-4b'],
+    statColors: ['var(--neon-cyan)','#7fbfff','#ffcc88','#ffaaaa'],
+    legend: [
+      { cls: 'call-3b', color: '#1a4fa0', label: 'CALL 3BET' },
+      { cls: 'fourbet', color: '#ff7b00', label: '4BET VALUE' },
+      { cls: 'bluff-4b', color: '#ff2244', label: '4BET BLUFF' },
+      { cls: '', color: 'rgba(255,255,255,0.1)', label: 'OR / FOLD' },
+    ],
+    filterDefs: [
+      { type: 'or', label: 'OR' },
+      { type: 'call-3b', label: 'CALL' },
+      { type: 'fourbet', label: '4BET' },
+      { type: 'bluff-4b', label: 'BLUFF' },
+    ],
+    actionMap: {
+      '': { label: 'FOLD', cls: 'fold' },
+      'or': { label: 'OPEN RAISE', cls: 'or-only' },
+      'call-3b': { label: 'CALL 3BET', cls: 'call-3b' },
+      '4bet': { label: '4BET VALUE', cls: 'fourbet' },
+      'bluff-4b': { label: '4BET BLUFF', cls: 'bluff-4b' },
+    },
+  },
+  '3BET': {
+    positions: ['vsUTGMP','vsCOBU','BBvsUTGMP','BBvsCOBUSB'],
+    posLabel: 'Situación',
+    defaultPos: 'vsUTGMP',
+    statLabels: ['TOTAL COMBOS','3BET','COLD CALL','FOLD'],
+    statKeys: ['all','threebet','coldcall','fold'],
+    statColors: ['var(--neon-cyan)','#ffbbbb','#88c0ff','var(--text-dim)'],
+    legend: [
+      { cls: 'threebet', color: 'rgba(210,40,60,0.8)', label: '3BET' },
+      { cls: 'coldcall', color: 'rgba(30,90,180,0.8)', label: 'COLD CALL' },
+    ],
+    filterDefs: [
+      { type: 'threebet', label: '3BET' },
+      { type: 'coldcall', label: 'CALL' },
+    ],
+    actionMap: {
+      '': { label: 'FOLD', cls: 'fold' },
+      'threebet': { label: '3BET', cls: 'threebet' },
+      'coldcall': { label: 'COLD CALL', cls: 'coldcall' },
+    },
+  },
+};
+
+const POS_DISPLAY = {
+  UTG:'UTG', MP:'MP', CO:'CO', BU:'BU', SB:'SB',
+  vsUTGMP:'vs UTG-MP', vsCOBU:'vs CO-BU',
+  BBvsUTGMP:'BB vs UTG-MP', BBvsCOBUSB:'BB vs CO-BU-SB',
+};
+
+let currentMode = 'OR';
+let currentSub = 'OR';
+let currentPos = 'UTG';
+let filters = { or: true, 'call-3b': true, fourbet: true, 'bluff-4b': true, threebet: true, coldcall: true };
+
+// ─── HELPERS ─────────────────────────────────────────────────────────────────
+function getKey(i, j) {
+  const r1 = RANKS[i], r2 = RANKS[j];
+  if (i === j) return r1 + r2;
+  if (j > i) return r1 + r2 + 's';
+  return r2 + r1 + 'o';
+}
+
+function getCombos(key) {
+  if (key.length === 2) return 6;
+  if (key.endsWith('s')) return 4;
+  return 12;
+}
+
+function getRangeData() {
+  if (currentMode === 'OR') return OR_RANGES[currentPos] || {};
+  return THREEBET_RANGES[currentPos] || {};
+}
+
+function getState(key) { return getRangeData()[key] || ''; }
+
+function getCellClass(state) {
+  if (!state) return '';
+  const cfg = MODE_CONFIG[currentMode];
+  const activeFilters = filters;
+
+  if (currentMode === 'OR') {
+    if (state === 'or') return activeFilters.or ? 'or-only' : '';
+    if (state === 'call-3b') return activeFilters['call-3b'] ? 'call-3b' : (activeFilters.or ? 'or-only' : '');
+    if (state === '4bet') return activeFilters.fourbet ? 'fourbet' : (activeFilters.or ? 'or-only' : '');
+    if (state === 'bluff-4b') return activeFilters['bluff-4b'] ? 'bluff-4b' : (activeFilters.or ? 'or-only' : '');
+  } else {
+    if (state === 'threebet') return activeFilters.threebet ? 'threebet' : '';
+    if (state === 'coldcall') return activeFilters.coldcall ? 'coldcall' : '';
+  }
+  return '';
+}
+
+function getActionLabel(state) {
+  const map = MODE_CONFIG[currentMode].actionMap;
+  return map[state] || map[''];
+}
+
+// ─── RENDER ───────────────────────────────────────────────────────────────────
+function buildMatrix() {
+  const matrix = document.getElementById('matrix');
+  matrix.innerHTML = '';
+
+  let counts = { or: 0, 'call-3b': 0, fourbet: 0, 'bluff-4b': 0, threebet: 0, coldcall: 0, fold: 0, all: 0 };
+
+  for (let i = 0; i < 13; i++) {
+    for (let j = 0; j < 13; j++) {
+      const isPair = i === j;
+      const isSuited = j > i;
+      const key = getKey(i, j);
+      const state = getState(key);
+      const cls = getCellClass(state);
+      const combos = getCombos(key);
+
+      if (state) {
+        counts.all += combos;
+        if (state === 'or' || state === 'call-3b' || state === '4bet' || state === 'bluff-4b') counts.or += combos;
+        if (counts[state] !== undefined) counts[state] += combos;
+      } else {
+        counts.fold += combos;
+      }
+
+      const cell = document.createElement('div');
+      cell.className = `cell ${isPair ? 'pair' : (isSuited ? 'suited' : 'offsuit')} ${cls}`.trim();
+      cell.textContent = key;
+      cell.addEventListener('mouseenter', () => showHandInfo(key, state));
+      cell.addEventListener('mouseleave', clearHandInfo);
+      matrix.appendChild(cell);
+    }
+  }
+
+  renderStats(counts);
+}
+
+function renderStats(counts) {
+  const cfg = MODE_CONFIG[currentMode];
+  const grid = document.getElementById('stats-grid');
+  grid.innerHTML = '';
+  cfg.statLabels.forEach((label, i) => {
+    const key = cfg.statKeys[i];
+    let val = 0;
+    if (key === 'or') val = counts.or;
+    else if (key === 'all') val = counts.all;
+    else if (key === 'fold') val = counts.fold;
+    else val = counts[key] || 0;
+
+    grid.innerHTML += `
+      <div class="stat-block">
+        <div class="stat-number" style="color:${cfg.statColors[i]};text-shadow:0 0 10px ${cfg.statColors[i]}44">${val}</div>
+        <div class="stat-label">${label}</div>
+      </div>`;
+  });
+}
+
+function renderLegend() {
+  const legend = document.getElementById('legend');
+  const cfg = MODE_CONFIG[currentMode];
+  legend.innerHTML = cfg.legend.map(item =>
+    `<div class="legend-item"><div class="legend-dot" style="background:${item.color}"></div><span>${item.label}</span></div>`
+  ).join('');
+}
+
+function renderFilters() {
+  const row = document.getElementById('filter-row');
+  const cfg = MODE_CONFIG[currentMode];
+  row.innerHTML = cfg.filterDefs.map(f =>
+    `<button class="filter-btn ${filters[f.type] ? '' : 'off'}" data-type="${f.type}">${f.label}</button>`
+  ).join('');
+  row.querySelectorAll('.filter-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const t = btn.dataset.type;
+      filters[t] = !filters[t];
+      btn.classList.toggle('off', !filters[t]);
+      buildMatrix();
+    });
+  });
+}
+
+function renderPositionGrid() {
+  const grid = document.getElementById('pos-grid');
+  const cfg = MODE_CONFIG[currentMode];
+  document.getElementById('pos-card-title').textContent = cfg.posLabel;
+  grid.innerHTML = '';
+  cfg.positions.forEach(pos => {
+    const btn = document.createElement('button');
+    btn.className = 'pos-btn' + (pos === currentPos ? ' active' : '');
+    btn.textContent = POS_DISPLAY[pos] || pos;
+    btn.dataset.pos = pos;
+    btn.style.fontSize = pos.length > 5 ? '0.42rem' : '0.6rem';
+    btn.addEventListener('click', () => {
+      currentPos = pos;
+      document.querySelectorAll('.pos-btn').forEach(b => b.classList.toggle('active', b.dataset.pos === pos));
+      document.getElementById('position-display').textContent = POS_DISPLAY[pos] || pos;
+      buildMatrix();
+    });
+    grid.appendChild(btn);
+  });
+}
+
+function showHandInfo(key, state) {
+  const action = getActionLabel(state);
+  const combos = getCombos(key);
+  document.getElementById('hand-info').innerHTML = `
+    <div class="hand-name">${key}</div>
+    <div class="hand-action ${action.cls}">${action.label}</div>
+    <div style="font-size:0.52rem;color:var(--text-dim);margin-top:4px">${combos} combos</div>
+  `;
+}
+
+function clearHandInfo() {
+  document.getElementById('hand-info').innerHTML = `<div style="color:var(--text-dim);font-size:0.58rem;letter-spacing:2px">HOVER SOBRE UNA MANO</div>`;
+}
+
+// ─── TAB HANDLING ─────────────────────────────────────────────────────────────
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+
+    const newMode = tab.dataset.mode;
+    const newSub = tab.dataset.sub;
+    const cfg = MODE_CONFIG[newMode];
+
+    currentMode = newMode;
+    currentSub = newSub;
+
+    // Set position to appropriate default for this sub-view
+    if (newMode === '3BET') {
+      currentPos = newSub;
+    } else {
+      currentPos = cfg.defaultPos;
+    }
+
+    document.getElementById('panel-subtitle').textContent = tab.textContent.toUpperCase();
+    document.getElementById('position-display').textContent = POS_DISPLAY[currentPos] || currentPos;
+
+    renderPositionGrid();
+    renderLegend();
+    renderFilters();
+    buildMatrix();
+  });
+});
+
+// ─── INIT ─────────────────────────────────────────────────────────────────────
+renderPositionGrid();
+renderLegend();
+renderFilters();
+buildMatrix();
+</script>
+</body>
+</html>
