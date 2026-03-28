@@ -224,6 +224,15 @@
         <button class="tab" data-mode="QUIZ" data-sub="QUIZ">⚡ QUIZ</button>
       </div>
     </div>
+    <div class="tab-divider"></div>
+    <div class="tab-group">
+      <div class="tab-group-label">Herramientas</div>
+      <div class="tab-row">
+        <button class="tab" data-mode="CALC" data-sub="CALC">🧮 POT ODDS</button>
+        <button class="tab" data-mode="OUTS" data-sub="OUTS">🎯 OUTS</button>
+        <button class="tab" data-mode="DIARY" data-sub="DIARY">📓 SESIÓN</button>
+      </div>
+    </div>
   </div>
 
   <!-- STUDY PANEL -->
@@ -231,6 +240,15 @@
 
   <!-- QUIZ PANEL -->
   <div id="quiz-panel" style="display:none"></div>
+
+  <!-- CALC PANEL -->
+  <div id="calc-panel" style="display:none"></div>
+
+  <!-- OUTS PANEL -->
+  <div id="outs-panel" style="display:none"></div>
+
+  <!-- DIARY PANEL -->
+  <div id="diary-panel" style="display:none"></div>
 
   <div class="main" id="range-main">
     <div class="range-panel">
@@ -730,6 +748,20 @@ function clearHandInfo() {
   document.getElementById('hand-info').innerHTML = `<div style="color:var(--text-dim);font-size:0.58rem;letter-spacing:2px">HOVER SOBRE UNA MANO</div>`;
 }
 
+// ─── PANEL SWITCHER ───────────────────────────────────────────────────────────
+const ALL_PANELS = ['range-main','study-panel','quiz-panel','calc-panel','outs-panel','diary-panel'];
+function hideAllPanels() {
+  ALL_PANELS.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = 'none';
+  });
+}
+function showPanel(id) {
+  hideAllPanels();
+  const el = document.getElementById(id);
+  if (el) el.style.display = id === 'range-main' ? 'grid' : 'block';
+}
+
 // ─── UNIFIED TAB HANDLER ─────────────────────────────────────────────────────
 document.querySelectorAll('.tab').forEach(tab => {
   tab.addEventListener('click', () => {
@@ -738,26 +770,14 @@ document.querySelectorAll('.tab').forEach(tab => {
 
     const newMode = tab.dataset.mode;
 
-    if (newMode === 'STUDY') {
-      document.getElementById('range-main').style.display = 'none';
-      document.getElementById('study-panel').style.display = 'block';
-      document.getElementById('quiz-panel').style.display = 'none';
-      renderStudy();
-      return;
-    }
-
-    if (newMode === 'QUIZ') {
-      document.getElementById('range-main').style.display = 'none';
-      document.getElementById('study-panel').style.display = 'none';
-      document.getElementById('quiz-panel').style.display = 'block';
-      initQuiz();
-      return;
-    }
+    if (newMode === 'STUDY') { showPanel('study-panel'); renderStudy(); return; }
+    if (newMode === 'QUIZ')  { showPanel('quiz-panel');  initQuiz();    return; }
+    if (newMode === 'CALC')  { showPanel('calc-panel');  initCalc();    return; }
+    if (newMode === 'OUTS')  { showPanel('outs-panel');  initOuts();    return; }
+    if (newMode === 'DIARY') { showPanel('diary-panel'); initDiary();   return; }
 
     // Range modes
-    document.getElementById('range-main').style.display = 'grid';
-    document.getElementById('study-panel').style.display = 'none';
-    document.getElementById('quiz-panel').style.display = 'none';
+    showPanel('range-main');
 
     const newSub = tab.dataset.sub;
     const cfg = MODE_CONFIG[newMode];
@@ -1526,6 +1546,586 @@ function renderQuizHistory() {
           : `${ACTION_LABELS[h.chosen] || 'Fold'} → ${ACTION_LABELS[h.rightAnswer]}`}
       </div>
     </div>`).join('');
+}
+
+
+// ─── POT ODDS CALCULATOR ──────────────────────────────────────────────────────
+function initCalc() {
+  const panel = document.getElementById('calc-panel');
+  panel.innerHTML = `
+<style>
+  .tool-wrap { max-width:740px; margin:0 auto; }
+  .tool-title { font-family:'Orbitron',sans-serif; font-size:1.05rem; font-weight:900; letter-spacing:3px; margin-bottom:4px; }
+  .tool-sub { font-size:0.55rem; letter-spacing:3px; color:var(--text-dim); margin-bottom:18px; }
+  .calc-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:14px; }
+  @media(max-width:560px){ .calc-grid{ grid-template-columns:1fr; } }
+  .calc-card { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:18px; position:relative; overflow:hidden; }
+  .calc-card::before { content:''; position:absolute; top:0; left:0; right:0; height:2px; background:linear-gradient(90deg,transparent,var(--neon-cyan),transparent); }
+  .calc-card-title { font-family:'Orbitron',sans-serif; font-size:0.56rem; letter-spacing:3px; color:var(--text-dim); margin-bottom:13px; }
+  .inp-lbl { font-size:0.56rem; letter-spacing:2px; color:var(--text-dim); margin-bottom:5px; display:block; }
+  .inp-group { margin-bottom:11px; }
+  .cinput { width:100%; font-family:'Share Tech Mono',monospace; font-size:1.05rem; background:rgba(0,0,0,0.4); border:1px solid var(--border); border-radius:7px; color:var(--neon-cyan); padding:9px 12px; outline:none; transition:border-color .2s; }
+  .cinput:focus { border-color:var(--neon-cyan); box-shadow:0 0 10px rgba(0,255,204,0.12); }
+  .result-box { background:rgba(0,0,0,0.4); border:1px solid var(--border); border-radius:9px; padding:14px; text-align:center; }
+  .result-big { font-family:'Orbitron',sans-serif; font-size:2.2rem; font-weight:900; color:var(--neon-cyan); text-shadow:0 0 18px rgba(0,255,204,0.35); line-height:1; }
+  .result-lbl { font-size:0.52rem; letter-spacing:3px; color:var(--text-dim); margin-top:5px; }
+  .verdict { font-family:'Orbitron',sans-serif; font-size:0.65rem; font-weight:700; margin-top:10px; padding:7px 14px; border-radius:20px; display:inline-block; }
+  .v-call  { background:rgba(57,255,20,0.1);  color:#39ff14; border:1px solid rgba(57,255,20,0.3); }
+  .v-fold  { background:rgba(255,34,68,0.1);   color:#ff6688; border:1px solid rgba(255,34,68,0.3); }
+  .v-close { background:rgba(255,215,0,0.1);   color:#ffd700; border:1px solid rgba(255,215,0,0.3); }
+  .rpills  { display:flex; gap:5px; margin-top:8px; flex-wrap:wrap; justify-content:center; }
+  .rpill   { font-size:0.52rem; padding:3px 9px; border-radius:20px; background:rgba(255,123,0,0.1); border:1px solid rgba(255,123,0,0.28); color:#ffcc88; }
+  .outs-chips { display:flex; flex-wrap:wrap; gap:5px; margin-top:9px; }
+  .out-chip { font-size:0.56rem; padding:4px 9px; border-radius:20px; border:1px solid var(--border); background:rgba(0,212,255,0.07); color:var(--neon-blue); cursor:pointer; transition:all .15s; }
+  .out-chip:hover { border-color:var(--neon-cyan); color:var(--neon-cyan); }
+  .eq-row { display:flex; gap:8px; align-items:center; }
+  .eq-unit { font-family:'Orbitron',sans-serif; font-size:0.8rem; color:var(--text-dim); }
+  .spr-grid { display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; margin-top:12px; }
+  .spr-block { background:rgba(0,0,0,0.3); border:1px solid var(--border); border-radius:7px; padding:9px; text-align:center; }
+  .spr-num { font-family:'Orbitron',sans-serif; font-size:1.1rem; font-weight:700; }
+  .spr-lbl { font-size:0.48rem; letter-spacing:1px; color:var(--text-dim); margin-top:3px; }
+  .ref-table { display:grid; grid-template-columns:auto 1fr; gap:3px 14px; font-size:0.6rem; line-height:2; }
+  .ref-key { color:#ffcc88; } .ref-val { color:var(--text); }
+  .ref-note { font-size:0.56rem; color:var(--text-dim); line-height:1.8; margin-top:12px; padding-top:10px; border-top:1px solid var(--border); }
+</style>
+
+<div class="tool-wrap">
+  <div class="tool-title" style="background:linear-gradient(90deg,#00ffcc,#00d4ff);-webkit-background-clip:text;-webkit-text-fill-color:transparent">🧮 CALCULADORA POT ODDS</div>
+  <div class="tool-sub">EQUITY MÍNIMO · OUTS · SPR · DECISIÓN EN TIEMPO REAL</div>
+
+  <div class="calc-grid">
+    <!-- POT ODDS -->
+    <div class="calc-card">
+      <div class="calc-card-title">POT ODDS — ¿LLAMO O FOLD?</div>
+      <div class="inp-group"><label class="inp-lbl">BOTE ACTUAL ($)</label><input class="cinput" id="c-pot" type="number" min="0" step="0.01" value="1.00"></div>
+      <div class="inp-group"><label class="inp-lbl">APUESTA DEL RIVAL ($)</label><input class="cinput" id="c-bet" type="number" min="0" step="0.01" value="0.50"></div>
+      <div class="inp-group"><label class="inp-lbl">MI EQUITY ESTIMADO (%)</label>
+        <div class="eq-row"><input class="cinput" id="c-eq" type="number" min="0" max="100" step="1" value="35"><span class="eq-unit">%</span></div>
+      </div>
+      <div class="result-box">
+        <div class="result-big" id="c-req">—</div>
+        <div class="result-lbl">EQUITY MÍNIMO REQUERIDO</div>
+        <div id="c-verdict"></div>
+        <div class="rpills" id="c-pills"></div>
+      </div>
+    </div>
+
+    <!-- OUTS -->
+    <div class="calc-card">
+      <div class="calc-card-title">OUTS → EQUITY (REGLA ×2 Y ×4)</div>
+      <div class="inp-group"><label class="inp-lbl">Nº DE OUTS</label><input class="cinput" id="o-outs" type="number" min="0" max="21" step="1" value="9"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:11px">
+        <div class="result-box"><div class="result-big" id="o-turn" style="font-size:1.7rem">—</div><div class="result-lbl">TURN (×2)</div></div>
+        <div class="result-box"><div class="result-big" id="o-river" style="font-size:1.7rem">—</div><div class="result-lbl">FLOP→RIVER (×4)</div></div>
+      </div>
+      <label class="inp-lbl">ATAJOS RÁPIDOS</label>
+      <div class="outs-chips">
+        <span class="out-chip" data-outs="2">Pareja→Set (2)</span>
+        <span class="out-chip" data-outs="4">Gutshot (4)</span>
+        <span class="out-chip" data-outs="6">2 Overcards (6)</span>
+        <span class="out-chip" data-outs="8">OESD (8)</span>
+        <span class="out-chip" data-outs="9">Color (9)</span>
+        <span class="out-chip" data-outs="12">Color+Gutshot (12)</span>
+        <span class="out-chip" data-outs="15">Color+OESD (15)</span>
+      </div>
+    </div>
+
+    <!-- SPR -->
+    <div class="calc-card">
+      <div class="calc-card-title">SPR — STACK TO POT RATIO</div>
+      <div class="inp-group"><label class="inp-lbl">BOTE ACTUAL ($)</label><input class="cinput" id="s-pot" type="number" min="0" step="0.01" value="1.50"></div>
+      <div class="inp-group"><label class="inp-lbl">MI STACK EFECTIVO ($)</label><input class="cinput" id="s-stack" type="number" min="0" step="0.01" value="5.00"></div>
+      <div class="spr-grid">
+        <div class="spr-block"><div class="spr-num" id="spr-val" style="color:var(--neon-cyan)">—</div><div class="spr-lbl">SPR</div></div>
+        <div class="spr-block"><div class="spr-num" id="spr-type" style="font-size:0.68rem;color:#ffcc88">—</div><div class="spr-lbl">TIPO</div></div>
+        <div class="spr-block"><div class="spr-num" id="spr-rec" style="font-size:0.52rem;line-height:1.4;color:var(--text)">—</div><div class="spr-lbl">CONSEJO</div></div>
+      </div>
+    </div>
+
+    <!-- REFERENCIA -->
+    <div class="calc-card">
+      <div class="calc-card-title">REFERENCIA RÁPIDA</div>
+      <div class="ref-table">
+        <span class="ref-key">Bet 25% pot</span><span class="ref-val">Equity mín: 16.7%</span>
+        <span class="ref-key">Bet 33% pot</span><span class="ref-val">Equity mín: 20%</span>
+        <span class="ref-key">Bet 50% pot</span><span class="ref-val">Equity mín: 25%</span>
+        <span class="ref-key">Bet 67% pot</span><span class="ref-val">Equity mín: 28.6%</span>
+        <span class="ref-key">Bet 75% pot</span><span class="ref-val">Equity mín: 30%</span>
+        <span class="ref-key">Bet 100% pot</span><span class="ref-val">Equity mín: 33.3%</span>
+        <span class="ref-key">Bet 150% pot</span><span class="ref-val">Equity mín: 37.5%</span>
+        <span class="ref-key">Bet 200% pot</span><span class="ref-val">Equity mín: 40%</span>
+      </div>
+      <div class="ref-note">
+        <strong style="color:var(--neon-blue)">Fórmula:</strong> Equity mín = Bet ÷ (Pot + Bet×2)<br>
+        <strong style="color:var(--neon-blue)">Regla ×2:</strong> Outs × 2 = % equity en 1 calle (turn)<br>
+        <strong style="color:var(--neon-blue)">Regla ×4:</strong> Outs × 4 = % equity en 2 calles (flop→river)<br>
+        <strong style="color:var(--neon-blue)">SPR bajo (&lt;4):</strong> Committeado — sets y TP fuerte al all-in<br>
+        <strong style="color:var(--neon-blue)">SPR alto (&gt;13):</strong> Speculative — draws y manos implícitas
+      </div>
+    </div>
+  </div>
+</div>`;
+
+  function calcPO() {
+    const pot = parseFloat(panel.querySelector('#c-pot').value) || 0;
+    const bet = parseFloat(panel.querySelector('#c-bet').value) || 0;
+    const myEq = parseFloat(panel.querySelector('#c-eq').value) || 0;
+    const req = (pot + bet + bet) > 0 ? bet / (pot + bet + bet) * 100 : 0;
+    panel.querySelector('#c-req').textContent = req.toFixed(1) + '%';
+    const diff = myEq - req;
+    const vEl = panel.querySelector('#c-verdict');
+    if (Math.abs(diff) < 3)   vEl.innerHTML = '<span class="verdict v-close">BORDERLINE — valora implied odds</span>';
+    else if (diff > 0)        vEl.innerHTML = `<span class="verdict v-call">✓ CALL — edge de +${diff.toFixed(1)}%</span>`;
+    else                      vEl.innerHTML = `<span class="verdict v-fold">✗ FOLD — faltan ${Math.abs(diff).toFixed(1)}%</span>`;
+    const ratio = pot > 0 ? (bet/pot*100).toFixed(0) : '—';
+    panel.querySelector('#c-pills').innerHTML =
+      `<span class="rpill">Apuesta: ${ratio}% bote</span><span class="rpill">Ratio: ${bet>0?(pot/bet).toFixed(1):'—'}:1</span>`;
+  }
+
+  function calcOuts() {
+    const n = parseInt(panel.querySelector('#o-outs').value) || 0;
+    panel.querySelector('#o-turn').textContent  = Math.min(n*2, 100) + '%';
+    panel.querySelector('#o-river').textContent = Math.min(n*4, 100) + '%';
+  }
+
+  function calcSPR() {
+    const pot = parseFloat(panel.querySelector('#s-pot').value) || 0;
+    const stk = parseFloat(panel.querySelector('#s-stack').value) || 0;
+    const spr = pot > 0 ? stk/pot : 0;
+    panel.querySelector('#spr-val').textContent = spr.toFixed(1);
+    let tipo, rec;
+    if (spr < 4)       { tipo = 'BAJO';  rec = 'Committeado. Juega fuerte con sets y TP.'; }
+    else if (spr < 13) { tipo = 'MEDIO'; rec = 'Balanced. Sigue el rango estándar postflop.'; }
+    else               { tipo = 'ALTO';  rec = 'Draws y manos especulativas ganan valor implícito.'; }
+    panel.querySelector('#spr-type').textContent = tipo;
+    panel.querySelector('#spr-rec').textContent  = rec;
+  }
+
+  panel.querySelectorAll('#c-pot,#c-bet,#c-eq').forEach(i => i.addEventListener('input', calcPO));
+  panel.querySelector('#o-outs').addEventListener('input', calcOuts);
+  panel.querySelectorAll('#s-pot,#s-stack').forEach(i => i.addEventListener('input', calcSPR));
+  panel.querySelectorAll('.out-chip').forEach(chip => chip.addEventListener('click', () => {
+    panel.querySelector('#o-outs').value = chip.dataset.outs; calcOuts();
+  }));
+  calcPO(); calcOuts(); calcSPR();
+}
+
+// ─── OUTS TABLE ───────────────────────────────────────────────────────────────
+function initOuts() {
+  const OUTS_DATA = [
+    { name:'Par de bolsillo → Set',           outs:2,  ex:'77 en A♠K♦3♣ — necesita un 7' },
+    { name:'Trío → Full House / Póker',       outs:7,  ex:'JJJ en A♣K♦2♥ — full o póker' },
+    { name:'Gutshot (escalera interior)',      outs:4,  ex:'JT en A♣8♦2♥ — necesita 9' },
+    { name:'Dos overcards',                   outs:6,  ex:'AK en 7♦5♣2♥ — par de A o K' },
+    { name:'Par con buena pegada (2p/set)',    outs:5,  ex:'AK en A♣7♦2♥ — set A o 2p KA' },
+    { name:'Dos pares → Full House',          outs:4,  ex:'AK en A♣K♦2♥ — full house' },
+    { name:'OESD (escalera abierta)',          outs:8,  ex:'JT en 9♣8♦2♥ — Q o 7' },
+    { name:'Proyecto de color (Flush draw)',   outs:9,  ex:'A♠K♠ en Q♠7♠2♣ — cualquier ♠' },
+    { name:'Gutshot + 2 Overcards',           outs:10, ex:'AK en J♣5♦2♥ — 4 gut + 6 overs' },
+    { name:'OESD + 2 Overcards',              outs:14, ex:'AK en QJ♣5♦ — 8 OESD + 6 overs' },
+    { name:'Flush draw + Gutshot',            outs:12, ex:'J♠9♠ en K♠8♠2♣ — 9 flush + 4 gut -1' },
+    { name:'Flush draw + OESD',               outs:15, ex:'J♠T♠ en 9♠8♥2♠ — 9+8 -2 overlap' },
+    { name:'Backdoor flush (2 calles)',        outs:2,  ex:'Aproximado — no usar en 1 sola calle' },
+  ];
+
+  const panel = document.getElementById('outs-panel');
+  panel.innerHTML = `
+<style>
+  .outs-wrap { max-width:860px; margin:0 auto; }
+  .outs-custom { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:18px; margin-bottom:14px; position:relative; overflow:hidden; }
+  .outs-custom::before { content:''; position:absolute; top:0; left:0; right:0; height:2px; background:linear-gradient(90deg,transparent,#ffd700,transparent); }
+  .slider-row { display:flex; align-items:center; gap:16px; margin-top:12px; flex-wrap:wrap; }
+  .outs-slider { -webkit-appearance:none; flex:1; min-width:120px; height:4px; border-radius:2px; background:var(--border); outline:none; cursor:pointer; }
+  .outs-slider::-webkit-slider-thumb { -webkit-appearance:none; width:18px; height:18px; border-radius:50%; background:var(--neon-cyan); cursor:pointer; box-shadow:0 0 8px rgba(0,255,204,0.4); }
+  .outs-big { font-family:'Orbitron',sans-serif; font-size:2.2rem; font-weight:900; color:var(--neon-cyan); text-shadow:0 0 18px rgba(0,255,204,0.3); min-width:48px; text-align:center; }
+  .outs-eq-pair { display:flex; gap:10px; flex:1; min-width:180px; }
+  .outs-eq-box { flex:1; background:rgba(0,0,0,0.4); border:1px solid var(--border); border-radius:8px; padding:9px; text-align:center; }
+  .outs-eq-num { font-family:'Orbitron',sans-serif; font-size:1.35rem; font-weight:700; }
+  .outs-eq-lbl { font-size:0.48rem; letter-spacing:2px; color:var(--text-dim); margin-top:3px; }
+  .ots-card { background:var(--surface); border:1px solid var(--border); border-radius:12px; overflow:hidden; margin-bottom:14px; }
+  .ots-head { display:grid; grid-template-columns:2fr 52px 72px 72px 1fr; background:rgba(0,0,0,0.4); border-bottom:1px solid var(--border); }
+  .ots-th { font-family:'Orbitron',sans-serif; font-size:0.48rem; letter-spacing:2px; color:var(--text-dim); padding:9px 11px; }
+  .ots-row { display:grid; grid-template-columns:2fr 52px 72px 72px 1fr; border-bottom:1px solid rgba(255,255,255,0.035); transition:background .15s; }
+  .ots-row:last-child { border-bottom:none; }
+  .ots-row:hover { background:rgba(0,212,255,0.04); }
+  .ots-td { padding:9px 11px; font-size:0.6rem; display:flex; align-items:center; }
+  .ots-td.num { font-family:'Orbitron',sans-serif; font-size:0.78rem; font-weight:700; justify-content:center; }
+  .ots-td.pct { font-family:'Orbitron',sans-serif; font-size:0.68rem; justify-content:center; }
+  .ots-td.ex { color:var(--text-dim); font-size:0.54rem; }
+  .ots-note { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:14px; font-size:0.6rem; line-height:1.9; color:var(--text-dim); }
+</style>
+
+<div class="outs-wrap">
+  <div style="margin-bottom:16px">
+    <div style="font-family:'Orbitron',sans-serif;font-size:1.05rem;font-weight:900;background:linear-gradient(90deg,#ff7b00,#ffd700);-webkit-background-clip:text;-webkit-text-fill-color:transparent;letter-spacing:3px">🎯 TABLA DE OUTS</div>
+    <div style="font-size:0.55rem;letter-spacing:3px;color:var(--text-dim);margin-top:3px">REGLA DEL 2 Y DEL 4 · REFERENCIA COMPLETA NL2</div>
+  </div>
+
+  <div class="outs-custom">
+    <div style="font-family:'Orbitron',sans-serif;font-size:0.56rem;letter-spacing:3px;color:var(--text-dim)">CALCULADORA INTERACTIVA</div>
+    <div class="slider-row">
+      <span style="font-size:0.6rem;color:var(--text-dim);letter-spacing:1px">OUTS:</span>
+      <div class="outs-big" id="ot-num">9</div>
+      <input class="outs-slider" id="ot-slider" type="range" min="1" max="20" value="9">
+      <div class="outs-eq-pair">
+        <div class="outs-eq-box">
+          <div class="outs-eq-num" id="ot-turn" style="color:#00d4ff">18%</div>
+          <div class="outs-eq-lbl">TURN (×2)</div>
+        </div>
+        <div class="outs-eq-box">
+          <div class="outs-eq-num" id="ot-river" style="color:#00ffcc">36%</div>
+          <div class="outs-eq-lbl">FLOP→RIVER (×4)</div>
+        </div>
+      </div>
+    </div>
+    <div style="margin-top:10px;width:100%;height:6px;background:var(--border);border-radius:3px">
+      <div id="ot-bar" style="height:6px;border-radius:3px;background:linear-gradient(90deg,var(--neon-blue),var(--neon-cyan));width:36%;transition:width .2s"></div>
+    </div>
+  </div>
+
+  <div class="ots-card">
+    <div class="ots-head">
+      <div class="ots-th">SITUACIÓN</div>
+      <div class="ots-th" style="text-align:center">OUTS</div>
+      <div class="ots-th" style="text-align:center">×2 TURN</div>
+      <div class="ots-th" style="text-align:center">×4 RIVER</div>
+      <div class="ots-th">EJEMPLO</div>
+    </div>
+    ${OUTS_DATA.map(d => {
+      const t = Math.min(d.outs*2, 100), r = Math.min(d.outs*4, 100);
+      const c = r>50?'#39ff14':r>30?'#00ffcc':r>20?'#00d4ff':r>12?'#ffcc88':'#ff8899';
+      return `<div class="ots-row">
+        <div class="ots-td" style="color:var(--text)">${d.name}</div>
+        <div class="ots-td num" style="color:${c}">${d.outs}</div>
+        <div class="ots-td pct" style="color:${c}">${t}%</div>
+        <div class="ots-td pct" style="color:${c}">${r}%</div>
+        <div class="ots-td ex">${d.ex}</div>
+      </div>`;
+    }).join('')}
+  </div>
+
+  <div class="ots-note">
+    <strong style="color:var(--neon-blue);font-family:'Orbitron',sans-serif;font-size:0.52rem;letter-spacing:2px">⚠️ IMPORTANTE EN NL2</strong><br>
+    La regla <strong style="color:var(--text)">×4</strong> solo aplica cuando vas a ver <strong style="color:var(--text)">dos calles</strong> pagando una sola apuesta. Si el rival puede hacer raise en el turn, usa ×2.<br>
+    Los <strong style="color:var(--text)">outs sucios</strong> (que mejoran también la mano rival) valen menos — descuenta 1-2 outs en esos casos.<br>
+    <strong style="color:var(--text)">Backdoor draws</strong> añaden ~3-4% de equity extra; no los cuentes como outs directos.
+  </div>
+</div>`;
+
+  panel.querySelector('#ot-slider').addEventListener('input', function() {
+    const v = parseInt(this.value);
+    const t = Math.min(v*2,100), r = Math.min(v*4,100);
+    panel.querySelector('#ot-num').textContent   = v;
+    panel.querySelector('#ot-turn').textContent  = t + '%';
+    panel.querySelector('#ot-river').textContent = r + '%';
+    panel.querySelector('#ot-bar').style.width   = r + '%';
+  });
+}
+
+// ─── SESSION DIARY ────────────────────────────────────────────────────────────
+function initDiary() {
+  const panel = document.getElementById('diary-panel');
+  let diary = JSON.parse(localStorage.getItem('nl2_diary') || '{"sessions":[],"villains":[]}');
+  function save() { localStorage.setItem('nl2_diary', JSON.stringify(diary)); }
+  function fmt(iso) {
+    const d = new Date(iso);
+    return d.toLocaleDateString('es-ES',{day:'2-digit',month:'2-digit',year:'numeric'})
+           + ' ' + d.toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit'});
+  }
+
+  function render() {
+    const sessions  = diary.sessions;
+    const villains  = diary.villains;
+    const totalRes  = sessions.reduce((a,s)=>a+s.result,0);
+    const totalMins = sessions.reduce((a,s)=>a+(s.duration||0),0);
+    const winSess   = sessions.filter(s=>s.result>0).length;
+    const winRate   = sessions.length>0 ? (winSess/sessions.length*100).toFixed(0) : 0;
+    const phRate    = totalMins>0 ? (totalRes/totalMins*60).toFixed(2) : '—';
+    const avgSess   = sessions.length>0 ? (totalRes/sessions.length).toFixed(2) : '—';
+
+    panel.innerHTML = `
+<style>
+  .diary-wrap { max-width:880px; margin:0 auto; }
+  .diary-tabs { display:flex; gap:6px; margin-bottom:16px; }
+  .diary-tab { font-family:'Orbitron',sans-serif; font-size:0.56rem; letter-spacing:2px; padding:8px 15px; border-radius:6px; border:1px solid var(--border); background:var(--surface); color:var(--text-dim); cursor:pointer; transition:all .2s; }
+  .diary-tab:hover { border-color:var(--neon-blue); color:var(--neon-blue); }
+  .diary-tab.active { border-color:#ffd700; color:#ffd700; background:rgba(255,215,0,0.07); }
+  .d2col { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+  @media(max-width:620px){ .d2col{ grid-template-columns:1fr; } }
+  .dcard { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:16px; position:relative; overflow:hidden; }
+  .dcard::before { content:''; position:absolute; top:0; left:0; right:0; height:2px; background:linear-gradient(90deg,transparent,#ffd700,transparent); }
+  .dcard-title { font-family:'Orbitron',sans-serif; font-size:0.54rem; letter-spacing:3px; color:var(--text-dim); margin-bottom:12px; }
+  .dinp-lbl { font-size:0.54rem; letter-spacing:2px; color:var(--text-dim); margin-bottom:5px; display:block; }
+  .dinp-grp { margin-bottom:10px; }
+  .dinput { width:100%; font-family:'Share Tech Mono',monospace; font-size:0.72rem; background:rgba(0,0,0,0.4); border:1px solid var(--border); border-radius:7px; color:var(--text); padding:8px 11px; outline:none; transition:border-color .2s; }
+  .dinput:focus { border-color:#ffd700; }
+  .dtextarea { width:100%; font-family:'Share Tech Mono',monospace; font-size:0.66rem; background:rgba(0,0,0,0.4); border:1px solid var(--border); border-radius:7px; color:var(--text); padding:8px 11px; outline:none; resize:vertical; min-height:76px; transition:border-color .2s; }
+  .dtextarea:focus { border-color:#ffd700; }
+  .dbtn-add { font-family:'Orbitron',sans-serif; font-size:0.56rem; letter-spacing:2px; padding:9px 16px; border-radius:7px; border:none; cursor:pointer; background:linear-gradient(135deg,#ffd700,#ff7b00); color:#070b14; font-weight:700; width:100%; margin-top:6px; transition:all .2s; }
+  .dbtn-add:hover { filter:brightness(1.1); }
+  .dbtn-del { font-family:'Orbitron',sans-serif; font-size:0.48rem; letter-spacing:1px; padding:3px 8px; border-radius:5px; border:1px solid rgba(255,34,68,0.3); background:rgba(255,34,68,0.08); color:#ff6688; cursor:pointer; transition:all .15s; }
+  .dbtn-del:hover { background:rgba(255,34,68,0.18); }
+  .dlist { display:flex; flex-direction:column; gap:7px; max-height:370px; overflow-y:auto; margin-top:4px; padding-right:4px; }
+  .dlist::-webkit-scrollbar { width:3px; } .dlist::-webkit-scrollbar-thumb { background:var(--border); border-radius:2px; }
+  .d-sess-item { background:rgba(0,0,0,0.3); border:1px solid var(--border); border-radius:8px; padding:10px 12px; }
+  .d-sess-hd { display:flex; justify-content:space-between; align-items:flex-start; gap:6px; margin-bottom:5px; }
+  .d-sess-date { font-size:0.5rem; color:var(--text-dim); letter-spacing:1px; }
+  .d-sess-result { font-family:'Orbitron',sans-serif; font-size:0.82rem; font-weight:700; }
+  .d-sess-notes { font-size:0.58rem; color:var(--text-dim); line-height:1.6; margin-top:4px; }
+  .d-sess-tags { display:flex; gap:5px; flex-wrap:wrap; margin-bottom:4px; }
+  .dtag { font-size:0.5rem; padding:2px 7px; border-radius:20px; background:rgba(255,215,0,0.08); border:1px solid rgba(255,215,0,0.22); color:#ffd700; }
+  .d-vill-item { background:rgba(0,0,0,0.3); border:1px solid var(--border); border-radius:8px; padding:10px 12px; }
+  .d-vill-hd { display:flex; justify-content:space-between; align-items:center; margin-bottom:5px; }
+  .d-vill-name { font-family:'Orbitron',sans-serif; font-size:0.68rem; font-weight:700; color:var(--neon-cyan); }
+  .d-vill-badge { font-size:0.52rem; padding:2px 8px; border-radius:20px; }
+  .vt-fish    { background:rgba(57,255,20,0.1);  border:1px solid rgba(57,255,20,0.3);  color:#39ff14; }
+  .vt-reg     { background:rgba(0,212,255,0.1);  border:1px solid rgba(0,212,255,0.3);  color:var(--neon-blue); }
+  .vt-tag     { background:rgba(255,123,0,0.1);  border:1px solid rgba(255,123,0,0.3);  color:#ffcc88; }
+  .vt-maniac  { background:rgba(255,34,68,0.1);  border:1px solid rgba(255,34,68,0.3);  color:#ff6688; }
+  .d-vill-notes { font-size:0.58rem; color:var(--text-dim); line-height:1.6; }
+  .sum-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-bottom:14px; }
+  @media(max-width:500px){ .sum-grid{ grid-template-columns:repeat(2,1fr); } }
+  .sum-block { background:rgba(0,0,0,0.35); border:1px solid var(--border); border-radius:8px; padding:10px; text-align:center; }
+  .sum-num { font-family:'Orbitron',sans-serif; font-size:1.05rem; font-weight:700; }
+  .sum-lbl { font-size:0.46rem; letter-spacing:1px; color:var(--text-dim); margin-top:3px; }
+  .d-empty { text-align:center; padding:22px; font-size:0.58rem; color:var(--text-dim); letter-spacing:1px; }
+  select.dinput { appearance:none; cursor:pointer; }
+</style>
+
+<div class="diary-wrap">
+  <div style="margin-bottom:16px">
+    <div style="font-family:'Orbitron',sans-serif;font-size:1.05rem;font-weight:900;background:linear-gradient(90deg,#ffd700,#ff7b00);-webkit-background-clip:text;-webkit-text-fill-color:transparent;letter-spacing:3px">📓 DIARIO DE SESIÓN</div>
+    <div style="font-size:0.54rem;letter-spacing:3px;color:var(--text-dim);margin-top:3px">SESIONES · VILLANOS · ESTADÍSTICAS · localStorage</div>
+  </div>
+
+  <div class="diary-tabs">
+    <button class="diary-tab active" id="dtab-sessions">📊 SESIONES (${sessions.length})</button>
+    <button class="diary-tab" id="dtab-villains">👤 VILLANOS (${villains.length})</button>
+    <button class="diary-tab" id="dtab-stats">📈 RESUMEN</button>
+  </div>
+
+  <!-- SESSIONS -->
+  <div id="dview-sessions">
+    <div class="d2col">
+      <div class="dcard">
+        <div class="dcard-title">NUEVA SESIÓN</div>
+        <div class="dinp-grp"><label class="dinp-lbl">FECHA / HORA</label><input class="dinput" id="d-date" type="datetime-local"></div>
+        <div class="dinp-grp"><label class="dinp-lbl">MESAS</label>
+          <select class="dinput" id="d-tables"><option value="1">1 mesa</option><option value="2" selected>2 mesas</option><option value="3">3 mesas</option><option value="4">4 mesas</option></select>
+        </div>
+        <div class="dinp-grp"><label class="dinp-lbl">DURACIÓN (minutos)</label><input class="dinput" id="d-dur" type="number" min="0" step="15" value="60"></div>
+        <div class="dinp-grp"><label class="dinp-lbl">RESULTADO ($) — usa + o -</label><input class="dinput" id="d-result" type="number" step="0.01" value="0" placeholder="ej: 2.50 o -1.20"></div>
+        <div class="dinp-grp"><label class="dinp-lbl">NOTAS</label><textarea class="dtextarea" id="d-notes" placeholder="¿Cómo fue la sesión? ¿Tilteaste? ¿Manos clave?..."></textarea></div>
+        <button class="dbtn-add" id="d-add-sess">+ GUARDAR SESIÓN</button>
+      </div>
+      <div class="dcard">
+        <div class="dcard-title">HISTORIAL</div>
+        <div class="dlist" id="d-sess-list">
+          ${sessions.length === 0
+            ? '<div class="d-empty">Sin sesiones aún.<br>¡Registra la primera!</div>'
+            : sessions.slice().reverse().map((s,ri) => {
+                const idx = sessions.length-1-ri;
+                const sign = s.result>=0?'+':'';
+                const col  = s.result>0?'#39ff14':s.result<0?'#ff6688':'#ffd700';
+                const ph   = s.duration>0?(s.result/s.duration*60).toFixed(2):'—';
+                return `<div class="d-sess-item">
+                  <div class="d-sess-hd">
+                    <div>
+                      <div class="d-sess-date">${fmt(s.date)}</div>
+                      <div class="d-sess-tags" style="margin-top:3px">
+                        <span class="dtag">${s.tables} mesa${s.tables>1?'s':''}</span>
+                        <span class="dtag">${s.duration}min</span>
+                        <span class="dtag">${ph}$/h</span>
+                      </div>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:6px">
+                      <div class="d-sess-result" style="color:${col}">${sign}$${Math.abs(s.result).toFixed(2)}</div>
+                      <button class="dbtn-del" data-del-s="${idx}">✕</button>
+                    </div>
+                  </div>
+                  ${s.notes?`<div class="d-sess-notes">${s.notes}</div>`:''}
+                </div>`;
+              }).join('')}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- VILLAINS -->
+  <div id="dview-villains" style="display:none">
+    <div class="d2col">
+      <div class="dcard">
+        <div class="dcard-title">NUEVO VILLANO</div>
+        <div class="dinp-grp"><label class="dinp-lbl">NICK / SEAT / ID</label><input class="dinput" id="v-name" placeholder="ej. Seat 5 · fish_pedro123"></div>
+        <div class="dinp-grp"><label class="dinp-lbl">TIPO</label>
+          <select class="dinput" id="v-type">
+            <option value="fish">🐟 Fish — llama demasiado</option>
+            <option value="reg">💎 Reg — juego sólido</option>
+            <option value="tag">🔒 TAG — tight aggressive</option>
+            <option value="maniac">🔥 Maniac — apuesta todo</option>
+          </select>
+        </div>
+        <div class="dinp-grp"><label class="dinp-lbl">MESA / SALA</label><input class="dinput" id="v-table" placeholder="ej. NL2 zoom · Mesa 3"></div>
+        <div class="dinp-grp"><label class="dinp-lbl">READS / TENDENCIAS</label><textarea class="dtextarea" id="v-notes" placeholder="ej. Llama cualquier draw. No hace CB en missed. 3bet solo AA-QQ. Fold to squeeze..."></textarea></div>
+        <button class="dbtn-add" id="d-add-vill">+ GUARDAR VILLANO</button>
+      </div>
+      <div class="dcard">
+        <div class="dcard-title">VILLANOS REGISTRADOS</div>
+        <div class="dlist" id="d-vill-list">
+          ${villains.length === 0
+            ? '<div class="d-empty">Sin villanos aún.<br>Anota reads durante la sesión.</div>'
+            : villains.slice().reverse().map((v,ri) => {
+                const idx = villains.length-1-ri;
+                const tCls = {fish:'vt-fish',reg:'vt-reg',tag:'vt-tag',maniac:'vt-maniac'}[v.type]||'vt-reg';
+                const tLbl = {fish:'🐟 Fish',reg:'💎 Reg',tag:'🔒 TAG',maniac:'🔥 Maniac'}[v.type]||v.type;
+                return `<div class="d-vill-item">
+                  <div class="d-vill-hd">
+                    <div>
+                      <div class="d-vill-name">${v.name}</div>
+                      <div style="font-size:0.48rem;color:var(--text-dim);margin-top:2px">${v.table||'—'} · ${fmt(v.date)}</div>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:6px">
+                      <span class="d-vill-badge ${tCls}">${tLbl}</span>
+                      <button class="dbtn-del" data-del-v="${idx}">✕</button>
+                    </div>
+                  </div>
+                  ${v.notes?`<div class="d-vill-notes">${v.notes}</div>`:''}
+                </div>`;
+              }).join('')}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- STATS -->
+  <div id="dview-stats" style="display:none">
+    ${sessions.length === 0
+      ? '<div class="d-empty" style="padding:40px">Registra sesiones para ver tu resumen estadístico.</div>'
+      : `<div class="sum-grid">
+          <div class="sum-block"><div class="sum-num" style="color:${totalRes>=0?'#39ff14':'#ff6688'}">${totalRes>=0?'+':''}$${Math.abs(totalRes).toFixed(2)}</div><div class="sum-lbl">RESULTADO TOTAL</div></div>
+          <div class="sum-block"><div class="sum-num" style="color:var(--neon-cyan)">${(totalMins/60).toFixed(1)}h</div><div class="sum-lbl">HORAS JUGADAS</div></div>
+          <div class="sum-block"><div class="sum-num" style="color:#ffd700">${winRate}%</div><div class="sum-lbl">SESIONES GANADORAS</div></div>
+          <div class="sum-block"><div class="sum-num" style="color:#ffcc88">${phRate!=='—'?(parseFloat(phRate)>=0?'+':'')+phRate+'$/h':phRate}</div><div class="sum-lbl">RATIO $/HORA</div></div>
+        </div>
+        <div class="d2col">
+          <div class="dcard">
+            <div class="dcard-title">DESGLOSE</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:3px 18px;font-size:0.6rem;line-height:2.2;color:var(--text-dim)">
+              <span>Sesiones totales:</span><span style="color:var(--text)">${sessions.length}</span>
+              <span>Ganadoras:</span><span style="color:#39ff14">${winSess}</span>
+              <span>Perdedoras:</span><span style="color:#ff6688">${sessions.filter(s=>s.result<0).length}</span>
+              <span>Empates:</span><span style="color:#ffd700">${sessions.filter(s=>s.result===0).length}</span>
+              <span>Media/sesión:</span><span style="color:${parseFloat(avgSess)>=0?'#39ff14':'#ff6688'}">${parseFloat(avgSess)>=0?'+':''}$${avgSess}</span>
+              <span>Mejor sesión:</span><span style="color:#39ff14">+$${sessions.reduce((a,s)=>s.result>a?s.result:a,-Infinity).toFixed(2)}</span>
+              <span>Peor sesión:</span><span style="color:#ff6688">$${sessions.reduce((a,s)=>s.result<a?s.result:a,Infinity).toFixed(2)}</span>
+              <span>Villanos anotados:</span><span style="color:var(--neon-cyan)">${villains.length}</span>
+            </div>
+          </div>
+          <div class="dcard">
+            <div class="dcard-title">CURVA ACUMULADA</div>
+            <svg id="d-chart" viewBox="0 0 260 100" style="width:100%;margin-top:6px"></svg>
+          </div>
+        </div>`}
+    <div style="margin-top:10px;text-align:right">
+      <button class="dbtn-del" id="d-clear" style="padding:6px 14px;font-size:0.52rem">🗑 Borrar todos los datos</button>
+    </div>
+  </div>
+</div>`;
+
+    // Draw chart
+    if (sessions.length > 1) {
+      const chart = panel.querySelector('#d-chart');
+      if (chart) {
+        let acc = 0;
+        const pts = sessions.map((s,i) => {
+          acc += s.result;
+          const x = 10 + i/(sessions.length-1)*240;
+          const vals = sessions.reduce((arr,ss)=>{ let a=(arr.length?arr[arr.length-1]:0)+ss.result; arr.push(a); return arr; },[]);
+          const mn = Math.min(...vals,0), mx = Math.max(...vals,0), rng = mx-mn||1;
+          const y = 90 - ((acc-mn)/rng)*80;
+          return `${x},${y}`;
+        }).join(' ');
+        const allVals = []; let a2=0; sessions.forEach(s=>{a2+=s.result;allVals.push(a2);});
+        const mn=Math.min(...allVals,0),mx=Math.max(...allVals,0),rng=mx-mn||1;
+        const col = allVals[allVals.length-1]>=0?'#39ff14':'#ff2244';
+        const zeroY = 90-((0-mn)/rng)*80;
+        chart.innerHTML = `
+          <line x1="10" y1="${zeroY}" x2="250" y2="${zeroY}" stroke="rgba(255,255,255,0.1)" stroke-width="0.5" stroke-dasharray="3,3"/>
+          <polyline points="${pts}" fill="none" stroke="${col}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          ${allVals.map((v,i)=>{
+            const x=10+i/(sessions.length-1)*240, y=90-((v-mn)/rng)*80;
+            return `<circle cx="${x}" cy="${y}" r="2.2" fill="${v>=0?'#39ff14':'#ff2244'}"/>`;
+          }).join('')}`;
+      }
+    }
+
+    // Diary tab switching
+    panel.querySelectorAll('.diary-tab').forEach(t => {
+      t.addEventListener('click', () => {
+        panel.querySelectorAll('.diary-tab').forEach(x=>x.classList.remove('active'));
+        t.classList.add('active');
+        ['sessions','villains','stats'].forEach(v => {
+          const el = panel.querySelector(`#dview-${v}`);
+          if (el) el.style.display = t.id===`dtab-${v}` ? 'block' : 'none';
+        });
+      });
+    });
+
+    // Add session
+    const addSess = panel.querySelector('#d-add-sess');
+    if (addSess) addSess.addEventListener('click', () => {
+      diary.sessions.push({
+        date: panel.querySelector('#d-date').value || new Date().toISOString(),
+        tables: parseInt(panel.querySelector('#d-tables').value)||1,
+        duration: parseInt(panel.querySelector('#d-dur').value)||0,
+        result: parseFloat(panel.querySelector('#d-result').value)||0,
+        notes: panel.querySelector('#d-notes').value.trim(),
+      });
+      save(); render(); panel.querySelector('#dtab-sessions').click();
+    });
+
+    // Add villain
+    const addVill = panel.querySelector('#d-add-vill');
+    if (addVill) addVill.addEventListener('click', () => {
+      const name = panel.querySelector('#v-name').value.trim();
+      if (!name) return;
+      diary.villains.push({
+        date: new Date().toISOString(),
+        name, type: panel.querySelector('#v-type').value,
+        table: panel.querySelector('#v-table').value.trim()||'—',
+        notes: panel.querySelector('#v-notes').value.trim(),
+      });
+      save(); render(); panel.querySelector('#dtab-villains').click();
+    });
+
+    // Delete session
+    panel.querySelectorAll('[data-del-s]').forEach(btn => btn.addEventListener('click', () => {
+      diary.sessions.splice(parseInt(btn.dataset.delS),1); save(); render();
+    }));
+
+    // Delete villain
+    panel.querySelectorAll('[data-del-v]').forEach(btn => btn.addEventListener('click', () => {
+      diary.villains.splice(parseInt(btn.dataset.delV),1); save(); render();
+    }));
+
+    // Clear all
+    const clr = panel.querySelector('#d-clear');
+    if (clr) clr.addEventListener('click', () => {
+      if (confirm('¿Borrar todos los datos? No se puede deshacer.')) {
+        diary={sessions:[],villains:[]}; save(); render();
+      }
+    });
+
+    // Set current datetime
+    const dateInp = panel.querySelector('#d-date');
+    if (dateInp && !dateInp.value) {
+      const now = new Date();
+      now.setMinutes(now.getMinutes()-now.getTimezoneOffset());
+      dateInp.value = now.toISOString().slice(0,16);
+    }
+  }
+
+  render();
 }
 
 // ─── INIT ─────────────────────────────────────────────────────────────────────
