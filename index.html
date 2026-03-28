@@ -100,7 +100,7 @@
 
   .cell {
     aspect-ratio: 1; display: flex; align-items: center; justify-content: center;
-    font-size: 1.10rem; border-radius: 3px; cursor: pointer;
+    font-size: 0.48rem; border-radius: 3px; cursor: pointer;
     transition: transform 0.1s; border: 1px solid transparent;
     background: rgba(255,255,255,0.02); color: var(--text-dim); user-select: none;
   }
@@ -221,12 +221,16 @@
       <div class="tab-group-label">Estudio</div>
       <div class="tab-row">
         <button class="tab" data-mode="STUDY" data-sub="STUDY">📖 POSTFLOP</button>
+        <button class="tab" data-mode="QUIZ" data-sub="QUIZ">⚡ QUIZ</button>
       </div>
     </div>
   </div>
 
   <!-- STUDY PANEL -->
   <div id="study-panel" style="display:none"></div>
+
+  <!-- QUIZ PANEL -->
+  <div id="quiz-panel" style="display:none"></div>
 
   <div class="main" id="range-main">
     <div class="range-panel">
@@ -737,13 +741,23 @@ document.querySelectorAll('.tab').forEach(tab => {
     if (newMode === 'STUDY') {
       document.getElementById('range-main').style.display = 'none';
       document.getElementById('study-panel').style.display = 'block';
+      document.getElementById('quiz-panel').style.display = 'none';
       renderStudy();
+      return;
+    }
+
+    if (newMode === 'QUIZ') {
+      document.getElementById('range-main').style.display = 'none';
+      document.getElementById('study-panel').style.display = 'none';
+      document.getElementById('quiz-panel').style.display = 'block';
+      initQuiz();
       return;
     }
 
     // Range modes
     document.getElementById('range-main').style.display = 'grid';
     document.getElementById('study-panel').style.display = 'none';
+    document.getElementById('quiz-panel').style.display = 'none';
 
     const newSub = tab.dataset.sub;
     const cfg = MODE_CONFIG[newMode];
@@ -1180,6 +1194,338 @@ function formatStudyText(text) {
     '<strong>$1</strong>');
 
   return `<p>${html}</p>`;
+}
+
+// ─── QUIZ ENGINE ──────────────────────────────────────────────────────────────
+
+const QUIZ_MODES = [
+  { id: 'or-all',    label: 'Open Raise (todas)',    desc: 'UTG → SB' },
+  { id: 'or-tight',  label: 'OR Tempranas',          desc: 'UTG / MP' },
+  { id: 'or-late',   label: 'OR Tardías',            desc: 'CO / BU / SB' },
+  { id: '3bet-ip',   label: '3Bet IP',               desc: 'vs UTG-MP / vs CO-BU' },
+  { id: '3bet-bb',   label: '3Bet desde BB',         desc: 'BB vs UTG-MP / CO-BU-SB' },
+  { id: 'all',       label: '🔀 Todo mezclado',      desc: 'Preflop completo' },
+];
+
+const SUIT_CHARS = ['♠','♥','♦','♣'];
+const SUIT_COLORS = { '♠':'#88c8ff', '♥':'#ff8888', '♦':'#ff8888', '♣':'#88c8ff' };
+
+let quizState = {
+  mode: 'or-all',
+  score: { correct: 0, wrong: 0, streak: 0, bestStreak: 0 },
+  current: null,
+  answered: false,
+  history: [],
+};
+
+function randomSuits(hand) {
+  const s = () => SUIT_CHARS[Math.floor(Math.random() * 4)];
+  if (hand.length === 2) {
+    const suits = [...SUIT_CHARS].sort(() => Math.random()-0.5).slice(0,2);
+    return hand[0] + suits[0] + hand[1] + suits[1];
+  }
+  const r1 = hand[0], r2 = hand[1], type = hand[2];
+  if (type === 's') {
+    const suit = SUIT_CHARS[Math.floor(Math.random() * 4)];
+    return r1 + suit + r2 + suit;
+  } else {
+    let s1 = SUIT_CHARS[Math.floor(Math.random() * 4)];
+    let s2; do { s2 = SUIT_CHARS[Math.floor(Math.random() * 4)]; } while (s2 === s1);
+    return r1 + s1 + r2 + s2;
+  }
+}
+
+function colorHand(handStr) {
+  return handStr.split('').map(c =>
+    SUIT_CHARS.includes(c)
+      ? `<span style="color:${SUIT_COLORS[c]}">${c}</span>`
+      : `<span style="color:#e8f4ff">${c}</span>`
+  ).join('');
+}
+
+function buildQuizPool(mode) {
+  const pool = [];
+  const addFromRange = (rangeObj, pos, rangeLabel) => {
+    for (const [hand, action] of Object.entries(rangeObj)) {
+      pool.push({ hand, pos, correctAnswer: action || 'fold', rangeLabel });
+    }
+  };
+  if (['or-all','or-tight','all'].includes(mode)) {
+    const positions = mode === 'or-tight' ? ['UTG','MP'] : ['UTG','MP','CO','BU','SB'];
+    positions.forEach(p => addFromRange(OR_RANGES[p], p, 'OR'));
+  }
+  if (mode === 'or-late') ['CO','BU','SB'].forEach(p => addFromRange(OR_RANGES[p], p, 'OR'));
+  if (['3bet-ip','all'].includes(mode)) ['vsUTGMP','vsCOBU'].forEach(p => addFromRange(THREEBET_RANGES[p], p, '3BET'));
+  if (['3bet-bb','all'].includes(mode)) ['BBvsUTGMP','BBvsCOBUSB'].forEach(p => addFromRange(THREEBET_RANGES[p], p, '3BET'));
+  return pool;
+}
+
+function pickQuestion(mode) {
+  const pool = buildQuizPool(mode);
+  const weights = pool.map(q => {
+    const hist = quizState.history.filter(h => h.hand === q.hand && h.pos === q.pos);
+    return (hist.length > 0 && !hist[hist.length-1].correct) ? 4 : 1;
+  });
+  const total = weights.reduce((a,b) => a+b, 0);
+  let r = Math.random() * total;
+  for (let i = 0; i < pool.length; i++) { r -= weights[i]; if (r <= 0) return pool[i]; }
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+
+function getAnswerButtons(q) {
+  if (q.rangeLabel === 'OR') return [
+    { key: 'fold',     label: 'FOLD',       color: 'var(--text-dim)', bg: 'rgba(255,255,255,0.04)' },
+    { key: 'or',       label: 'OPEN RAISE', color: '#c8e0ff',         bg: 'rgba(255,255,255,0.08)' },
+    { key: 'call-3b',  label: 'CALL 3BET',  color: '#7fbfff',         bg: 'rgba(26,79,160,0.25)' },
+    { key: '4bet',     label: '4BET VALUE', color: '#ffcc88',         bg: 'rgba(255,123,0,0.25)' },
+    { key: 'bluff-4b', label: '4BET BLUFF', color: '#ffaaaa',         bg: 'rgba(255,34,68,0.25)' },
+  ];
+  return [
+    { key: 'fold',     label: 'FOLD',       color: 'var(--text-dim)', bg: 'rgba(255,255,255,0.04)' },
+    { key: 'threebet', label: '3BET',        color: '#ffbbbb',         bg: 'rgba(210,40,60,0.25)' },
+    { key: 'coldcall', label: 'COLD CALL',   color: '#88c0ff',         bg: 'rgba(30,90,180,0.25)' },
+  ];
+}
+
+function posDisplayShort(pos) {
+  return { UTG:'UTG', MP:'MP', CO:'CO', BU:'BU', SB:'SB',
+    vsUTGMP:'vs UTG-MP', vsCOBU:'vs CO-BU',
+    BBvsUTGMP:'BB vs UTG-MP', BBvsCOBUSB:'BB vs CO-BU-SB' }[pos] || pos;
+}
+
+const ACTION_LABELS = {
+  'fold':'FOLD','or':'OPEN RAISE','call-3b':'CALL 3BET',
+  '4bet':'4BET VALUE','bluff-4b':'4BET BLUFF','threebet':'3BET','coldcall':'COLD CALL',
+};
+
+function initQuiz() {
+  const panel = document.getElementById('quiz-panel');
+  panel.innerHTML = `
+<style>
+  .quiz-wrap { max-width: 640px; margin: 0 auto; }
+  .quiz-header-row { display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; flex-wrap:wrap; gap:10px; }
+  .quiz-logo { font-family:'Orbitron',sans-serif; font-size:1.05rem; font-weight:900; background:linear-gradient(90deg,#ff7b00,#ffd700); -webkit-background-clip:text; -webkit-text-fill-color:transparent; letter-spacing:3px; }
+  .quiz-logo-sub { font-size:0.52rem; letter-spacing:3px; color:var(--text-dim); margin-top:2px; }
+  .quiz-scorebar { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  .quiz-score-pill { font-family:'Orbitron',sans-serif; font-size:0.62rem; font-weight:700; padding:5px 12px; border-radius:20px; letter-spacing:1px; }
+  .score-correct { background:rgba(57,255,20,0.1); color:#39ff14; border:1px solid rgba(57,255,20,0.3); }
+  .score-wrong   { background:rgba(255,34,68,0.1);  color:#ff6688; border:1px solid rgba(255,34,68,0.3); }
+  .score-streak  { background:rgba(255,215,0,0.1);  color:#ffd700; border:1px solid rgba(255,215,0,0.3); }
+  .score-pct     { background:rgba(0,255,204,0.1);  color:var(--neon-cyan); border:1px solid rgba(0,255,204,0.3); }
+
+  .quiz-mode-select { display:flex; gap:5px; flex-wrap:wrap; margin-bottom:16px; }
+  .quiz-mode-btn { font-family:'Orbitron',sans-serif; font-size:0.52rem; letter-spacing:1px; padding:6px 10px; border-radius:6px; border:1px solid var(--border); background:var(--surface); color:var(--text-dim); cursor:pointer; transition:all 0.2s; line-height:1.5; }
+  .quiz-mode-btn:hover { border-color:#ff7b00; color:#ff7b00; }
+  .quiz-mode-btn.active { border-color:#ffd700; color:#ffd700; background:rgba(255,215,0,0.07); }
+
+  .quiz-card { background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:26px 22px; text-align:center; margin-bottom:14px; position:relative; overflow:hidden; transition:border-color 0.25s, box-shadow 0.25s; }
+  .quiz-card::before { content:''; position:absolute; top:0; left:0; right:0; height:2px; background:linear-gradient(90deg,transparent,#ff7b00,#ffd700,transparent); }
+  .quiz-card.correct-flash { border-color:#39ff14; box-shadow:0 0 28px rgba(57,255,20,0.18); }
+  .quiz-card.wrong-flash   { border-color:#ff2244; box-shadow:0 0 28px rgba(255,34,68,0.18); }
+
+  .quiz-pos-badge { display:inline-block; font-family:'Orbitron',sans-serif; font-size:0.68rem; font-weight:700; padding:4px 14px; border-radius:20px; border:1px solid #ff7b0066; background:rgba(255,123,0,0.1); color:#ffcc88; letter-spacing:2px; margin-bottom:18px; }
+  .quiz-hand-display { font-family:'Orbitron',sans-serif; font-size:3rem; font-weight:900; letter-spacing:5px; margin-bottom:6px; line-height:1; }
+  .quiz-hand-type { font-size:0.56rem; letter-spacing:3px; color:var(--text-dim); margin-bottom:22px; }
+  .quiz-question { font-size:0.7rem; letter-spacing:2px; color:var(--text); margin-bottom:18px; }
+
+  .quiz-answers { display:flex; flex-direction:column; gap:7px; }
+  .quiz-answer-btn { font-family:'Orbitron',sans-serif; font-size:0.65rem; font-weight:700; letter-spacing:2px; padding:12px 18px; border-radius:8px; border:1px solid; cursor:pointer; transition:all 0.13s; }
+  .quiz-answer-btn:hover:not(:disabled) { transform:translateY(-1px); filter:brightness(1.18); }
+  .quiz-answer-btn:disabled { cursor:default; }
+  .quiz-answer-btn.reveal-correct { box-shadow:0 0 18px rgba(57,255,20,0.35)!important; border-color:#39ff14!important; animation:correctPulse 0.35s ease; }
+  .quiz-answer-btn.reveal-wrong   { box-shadow:0 0 18px rgba(255,34,68,0.3)!important;  border-color:#ff2244!important; opacity:0.55; }
+  @keyframes correctPulse { 0%{transform:scale(1)} 40%{transform:scale(1.03)} 100%{transform:scale(1)} }
+
+  .quiz-feedback { margin-top:14px; padding:11px 14px; border-radius:8px; font-size:0.65rem; letter-spacing:1px; line-height:1.65; display:none; }
+  .quiz-feedback.correct { background:rgba(57,255,20,0.07); border:1px solid rgba(57,255,20,0.28); color:#39ff14; }
+  .quiz-feedback.wrong   { background:rgba(255,34,68,0.07);  border:1px solid rgba(255,34,68,0.28);  color:#ff8899; }
+
+  .quiz-next-btn { font-family:'Orbitron',sans-serif; font-size:0.68rem; font-weight:700; letter-spacing:3px; padding:12px 30px; border-radius:8px; border:none; background:linear-gradient(135deg,#ff7b00,#ffd700); color:#070b14; cursor:pointer; margin-top:12px; transition:all 0.2s; display:none; width:100%; }
+  .quiz-next-btn:hover { filter:brightness(1.1); transform:translateY(-1px); }
+
+  .quiz-history { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:13px; }
+  .quiz-history-title { font-family:'Orbitron',sans-serif; font-size:0.52rem; letter-spacing:3px; color:var(--text-dim); margin-bottom:9px; }
+  .quiz-hist-item { display:flex; align-items:center; gap:8px; font-size:0.58rem; padding:5px 7px; border-radius:5px; background:rgba(0,0,0,0.18); margin-bottom:3px; }
+  .hist-dot { width:7px; height:7px; border-radius:50%; flex-shrink:0; }
+  .hist-hand { font-family:'Orbitron',sans-serif; font-size:0.6rem; color:var(--text); min-width:55px; }
+  .hist-pos  { color:var(--text-dim); font-size:0.53rem; min-width:85px; }
+  .hist-ans  { font-size:0.56rem; flex:1; }
+  .quiz-empty { font-size:0.58rem; color:var(--text-dim); text-align:center; padding:8px 0; letter-spacing:1px; }
+</style>
+
+<div class="quiz-wrap">
+  <div class="quiz-header-row">
+    <div>
+      <div class="quiz-logo">⚡ MODO QUIZ</div>
+      <div class="quiz-logo-sub">ENTRENAMIENTO PREFLOP · NL2</div>
+    </div>
+    <div class="quiz-scorebar">
+      <div class="quiz-score-pill score-correct">✓ <span id="q-correct">0</span></div>
+      <div class="quiz-score-pill score-wrong">✗ <span id="q-wrong">0</span></div>
+      <div class="quiz-score-pill score-streak">🔥 <span id="q-streak">0</span></div>
+      <div class="quiz-score-pill score-pct" id="q-pct">— %</div>
+    </div>
+  </div>
+
+  <div class="quiz-mode-select" id="quiz-mode-select"></div>
+
+  <div class="quiz-card" id="quiz-card">
+    <div class="quiz-pos-badge" id="q-pos-badge">—</div>
+    <div class="quiz-hand-display" id="q-hand-display">—</div>
+    <div class="quiz-hand-type" id="q-hand-type"></div>
+    <div class="quiz-question" id="q-question"></div>
+    <div class="quiz-answers" id="q-answers"></div>
+    <div class="quiz-feedback" id="q-feedback"></div>
+    <button class="quiz-next-btn" id="q-next">SIGUIENTE MANO →</button>
+  </div>
+
+  <div class="quiz-history">
+    <div class="quiz-history-title">ÚLTIMAS RESPUESTAS</div>
+    <div id="quiz-history-list"><div class="quiz-empty">Aún no hay respuestas</div></div>
+  </div>
+</div>`;
+
+  // Mode buttons
+  const modeSelect = panel.querySelector('#quiz-mode-select');
+  QUIZ_MODES.forEach(m => {
+    const btn = document.createElement('button');
+    btn.className = 'quiz-mode-btn' + (m.id === quizState.mode ? ' active' : '');
+    btn.innerHTML = `${m.label}<span style="display:block;font-size:0.42rem;opacity:0.55;font-family:monospace;margin-top:1px">${m.desc}</span>`;
+    btn.addEventListener('click', () => {
+      quizState.mode = m.id;
+      panel.querySelectorAll('.quiz-mode-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      nextQuestion();
+    });
+    modeSelect.appendChild(btn);
+  });
+
+  panel.querySelector('#q-next').addEventListener('click', nextQuestion);
+  nextQuestion();
+}
+
+function nextQuestion() {
+  quizState.current = pickQuestion(quizState.mode);
+  quizState.answered = false;
+  renderQuestion();
+}
+
+function renderQuestion() {
+  const q = quizState.current;
+  const panel = document.getElementById('quiz-panel');
+  if (!panel || !q) return;
+
+  panel.querySelector('#q-pos-badge').textContent = posDisplayShort(q.pos);
+  panel.querySelector('#q-hand-display').innerHTML = colorHand(randomSuits(q.hand));
+
+  const isPair = q.hand.length === 2;
+  const isSuited = q.hand.endsWith('s');
+  panel.querySelector('#q-hand-type').textContent =
+    isPair ? 'PAR · 6 combos' : isSuited ? 'SUITED · 4 combos' : 'OFFSUIT · 12 combos';
+
+  panel.querySelector('#q-question').textContent = q.rangeLabel === 'OR'
+    ? `¿Qué haces desde ${posDisplayShort(q.pos)}?`
+    : `¿Qué acción tomas en esta situación?`;
+
+  const card = panel.querySelector('#quiz-card');
+  card.classList.remove('correct-flash','wrong-flash');
+
+  // Build shuffled answer buttons (fold always last)
+  const btns = getAnswerButtons(q);
+  const foldBtn = btns.find(b => b.key === 'fold');
+  const rest = btns.filter(b => b.key !== 'fold').sort(() => Math.random() - 0.5);
+  const answersDiv = panel.querySelector('#q-answers');
+  answersDiv.innerHTML = '';
+  [...rest, foldBtn].forEach(b => {
+    const btn = document.createElement('button');
+    btn.className = 'quiz-answer-btn';
+    btn.style.cssText = `color:${b.color};background:${b.bg};border-color:${b.color}55`;
+    btn.textContent = b.label;
+    btn.dataset.key = b.key;
+    btn.addEventListener('click', () => handleAnswer(b.key));
+    answersDiv.appendChild(btn);
+  });
+
+  panel.querySelector('#q-feedback').style.display = 'none';
+  panel.querySelector('#q-next').style.display = 'none';
+}
+
+function handleAnswer(chosen) {
+  if (quizState.answered) return;
+  quizState.answered = true;
+  const q = quizState.current;
+  const correct = chosen === q.correctAnswer;
+  const panel = document.getElementById('quiz-panel');
+
+  // Score
+  if (correct) {
+    quizState.score.correct++;
+    quizState.score.streak++;
+    if (quizState.score.streak > quizState.score.bestStreak)
+      quizState.score.bestStreak = quizState.score.streak;
+  } else {
+    quizState.score.wrong++;
+    quizState.score.streak = 0;
+  }
+
+  const total = quizState.score.correct + quizState.score.wrong;
+  const pct = total > 0 ? Math.round(quizState.score.correct / total * 100) : 0;
+  panel.querySelector('#q-correct').textContent = quizState.score.correct;
+  panel.querySelector('#q-wrong').textContent = quizState.score.wrong;
+  panel.querySelector('#q-streak').textContent = quizState.score.streak;
+  panel.querySelector('#q-pct').textContent = pct + ' %';
+
+  // Flash
+  panel.querySelector('#quiz-card').classList.add(correct ? 'correct-flash' : 'wrong-flash');
+
+  // Highlight buttons
+  panel.querySelectorAll('.quiz-answer-btn').forEach(btn => {
+    btn.disabled = true;
+    if (btn.dataset.key === q.correctAnswer) {
+      btn.classList.add('reveal-correct');
+      btn.textContent += ' ✓';
+    } else if (btn.dataset.key === chosen && !correct) {
+      btn.classList.add('reveal-wrong');
+      btn.textContent += ' ✗';
+    }
+  });
+
+  // Feedback
+  const fb = panel.querySelector('#q-feedback');
+  fb.className = 'quiz-feedback ' + (correct ? 'correct' : 'wrong');
+  fb.style.display = 'block';
+  const CORRECT_MSGS = ['¡Correcto! 🎯','¡Exacto! 💪','¡Perfecto! 🔥','¡Bien jugado! ⚡','¡Eso es! 🎰'];
+  fb.innerHTML = correct
+    ? `<strong>${CORRECT_MSGS[Math.floor(Math.random()*CORRECT_MSGS.length)]}</strong> ${ACTION_LABELS[q.correctAnswer]} es la jugada correcta desde ${posDisplayShort(q.pos)}.`
+    : `<strong>Incorrecto.</strong> Con <strong>${q.hand}</strong> desde <strong>${posDisplayShort(q.pos)}</strong> la acción correcta es <strong>${ACTION_LABELS[q.correctAnswer]}</strong>.`;
+
+  // History
+  quizState.history.unshift({ hand: q.hand, pos: q.pos, correct, chosen, rightAnswer: q.correctAnswer });
+  if (quizState.history.length > 8) quizState.history.pop();
+  renderQuizHistory();
+
+  panel.querySelector('#q-next').style.display = 'block';
+}
+
+function renderQuizHistory() {
+  const panel = document.getElementById('quiz-panel');
+  const list = panel.querySelector('#quiz-history-list');
+  if (!list) return;
+  if (quizState.history.length === 0) {
+    list.innerHTML = '<div class="quiz-empty">Aún no hay respuestas</div>';
+    return;
+  }
+  list.innerHTML = quizState.history.map(h => `
+    <div class="quiz-hist-item">
+      <div class="hist-dot" style="background:${h.correct ? '#39ff14':'#ff2244'}"></div>
+      <div class="hist-hand">${h.hand}</div>
+      <div class="hist-pos">${posDisplayShort(h.pos)}</div>
+      <div class="hist-ans" style="color:${h.correct ? '#39ff14':'#ff8899'}">
+        ${h.correct
+          ? ACTION_LABELS[h.rightAnswer]
+          : `${ACTION_LABELS[h.chosen] || 'Fold'} → ${ACTION_LABELS[h.rightAnswer]}`}
+      </div>
+    </div>`).join('');
 }
 
 // ─── INIT ─────────────────────────────────────────────────────────────────────
