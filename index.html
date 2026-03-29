@@ -1825,13 +1825,96 @@ function initOuts() {
 // ─── SESSION DIARY ────────────────────────────────────────────────────────────
 function initDiary() {
   const panel = document.getElementById('diary-panel');
-  let diary = JSON.parse(localStorage.getItem('nl2_diary') || '{"sessions":[],"villains":[]}');
-  function save() { localStorage.setItem('nl2_diary', JSON.stringify(diary)); }
+
+  // ── JSONBin.io cloud sync ──────────────────────────────────────────────────
+  // Access Key restringida: solo Read+Update sobre este bin concreto
+  const JBIN_KEY = '$2a$10$l4uKQWtLQ4XFGfDECZrUaenG0Mg3GcCNwPokfBzVETrv9mzNJ47P.';
+  const BIN_ID   = '69c93e095fdde574550f6ada';
+  const LS_KEY   = 'nl2_diary';
+  let syncStatus = 'idle';
+
+  function updateSyncBadge(state, msg) {
+    syncStatus = state;
+    const badge = document.getElementById('sync-badge');
+    if (!badge) return;
+    const map = {
+      idle:    { color:'var(--text-dim)', icon:'☁️', text:'Nube sincronizada' },
+      saving:  { color:'#ffd700',         icon:'⏳', text:'Guardando...' },
+      loading: { color:'#ffd700',         icon:'⏳', text:'Cargando...' },
+      ok:      { color:'#39ff14',         icon:'✓',  text:'Guardado en nube' },
+      error:   { color:'#ff6688',         icon:'⚠️', text:'Error de red — guardado local' },
+      offline: { color:'#ffcc88',         icon:'📴', text:'Sin conexión — modo local' },
+    };
+    const s = map[state] || map.idle;
+    badge.style.color = s.color;
+    badge.innerHTML = `${s.icon} ${msg || s.text}`;
+  }
+
+  async function cloudSave(data) {
+    updateSyncBadge('saving');
+    try {
+      const res = await fetch(`https://api.jsonbin.io/v3/b/${BIN_ID}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Access-Key': JBIN_KEY,
+        },
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) { const j = await res.json(); throw new Error(j.message || 'Update failed'); }
+      updateSyncBadge('ok');
+      setTimeout(() => updateSyncBadge('idle'), 2500);
+    } catch(e) {
+      console.warn('JSONBin error:', e);
+      updateSyncBadge('error');
+    }
+  }
+
+  async function cloudLoad() {
+    updateSyncBadge('loading');
+    try {
+      const res = await fetch(`https://api.jsonbin.io/v3/b/${BIN_ID}/latest`, {
+        headers: { 'X-Access-Key': JBIN_KEY },
+      });
+      if (!res.ok) throw new Error('Load failed');
+      const json = await res.json();
+      updateSyncBadge('idle');
+      return json.record;
+    } catch(e) {
+      console.warn('JSONBin load error:', e);
+      updateSyncBadge('offline', 'Sin conexión — datos locales');
+      return null;
+    }
+  }
+
+  // Local fallback always available
+  let diary = JSON.parse(localStorage.getItem(LS_KEY) || '{"sessions":[],"villains":[]}');
+
+  function saveAll(data) {
+    diary = data;
+    localStorage.setItem(LS_KEY, JSON.stringify(data));
+    cloudSave(data);
+  }
+
   function fmt(iso) {
     const d = new Date(iso);
     return d.toLocaleDateString('es-ES',{day:'2-digit',month:'2-digit',year:'numeric'})
            + ' ' + d.toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit'});
   }
+
+  // Render first from local, then refresh from cloud
+  render();
+  cloudLoad().then(cloudData => {
+    if (!cloudData) return;
+    // Merge: take whichever has more data
+    const merged = {
+      sessions: cloudData.sessions.length >= diary.sessions.length ? cloudData.sessions : diary.sessions,
+      villains: cloudData.villains.length >= diary.villains.length ? cloudData.villains : diary.villains,
+    };
+    diary = merged;
+    localStorage.setItem(LS_KEY, JSON.stringify(merged));
+    render();
+  });
 
   function render() {
     const sessions  = diary.sessions;
@@ -1893,9 +1976,12 @@ function initDiary() {
 </style>
 
 <div class="diary-wrap">
-  <div style="margin-bottom:16px">
-    <div style="font-family:'Orbitron',sans-serif;font-size:1.05rem;font-weight:900;background:linear-gradient(90deg,#ffd700,#ff7b00);-webkit-background-clip:text;-webkit-text-fill-color:transparent;letter-spacing:3px">📓 DIARIO DE SESIÓN</div>
-    <div style="font-size:0.54rem;letter-spacing:3px;color:var(--text-dim);margin-top:3px">SESIONES · VILLANOS · ESTADÍSTICAS · localStorage</div>
+  <div style="margin-bottom:16px;display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:10px">
+    <div>
+      <div style="font-family:'Orbitron',sans-serif;font-size:1.05rem;font-weight:900;background:linear-gradient(90deg,#ffd700,#ff7b00);-webkit-background-clip:text;-webkit-text-fill-color:transparent;letter-spacing:3px">📓 DIARIO DE SESIÓN</div>
+      <div style="font-size:0.54rem;letter-spacing:3px;color:var(--text-dim);margin-top:3px">SESIONES · VILLANOS · ESTADÍSTICAS · NUBE</div>
+    </div>
+    <div id="sync-badge" style="font-size:0.58rem;letter-spacing:1px;color:var(--text-dim);padding:5px 12px;border:1px solid var(--border);border-radius:20px;background:rgba(0,0,0,0.3);white-space:nowrap">☁️ Nube sincronizada</div>
   </div>
 
   <div class="diary-tabs">
@@ -2081,7 +2167,7 @@ function initDiary() {
         result: parseFloat(panel.querySelector('#d-result').value)||0,
         notes: panel.querySelector('#d-notes').value.trim(),
       });
-      save(); render(); panel.querySelector('#dtab-sessions').click();
+      saveAll(diary); render(); panel.querySelector('#dtab-sessions').click();
     });
 
     // Add villain
@@ -2095,24 +2181,24 @@ function initDiary() {
         table: panel.querySelector('#v-table').value.trim()||'—',
         notes: panel.querySelector('#v-notes').value.trim(),
       });
-      save(); render(); panel.querySelector('#dtab-villains').click();
+      saveAll(diary); render(); panel.querySelector('#dtab-villains').click();
     });
 
     // Delete session
     panel.querySelectorAll('[data-del-s]').forEach(btn => btn.addEventListener('click', () => {
-      diary.sessions.splice(parseInt(btn.dataset.delS),1); save(); render();
+      diary.sessions.splice(parseInt(btn.dataset.delS),1); saveAll(diary); render();
     }));
 
     // Delete villain
     panel.querySelectorAll('[data-del-v]').forEach(btn => btn.addEventListener('click', () => {
-      diary.villains.splice(parseInt(btn.dataset.delV),1); save(); render();
+      diary.villains.splice(parseInt(btn.dataset.delV),1); saveAll(diary); render();
     }));
 
     // Clear all
     const clr = panel.querySelector('#d-clear');
     if (clr) clr.addEventListener('click', () => {
       if (confirm('¿Borrar todos los datos? No se puede deshacer.')) {
-        diary={sessions:[],villains:[]}; save(); render();
+        diary={sessions:[],villains:[]}; saveAll(diary); render();
       }
     });
 
