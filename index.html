@@ -95,12 +95,16 @@
 
   .position-label { font-family: 'Orbitron', sans-serif; font-size: 0.95rem; font-weight: 900; color: var(--neon-cyan); letter-spacing: 3px; text-shadow: 0 0 16px rgba(0,255,204,0.4); }
 
-  .matrix-container { overflow-x: auto; }
-  .matrix { display: grid; grid-template-columns: repeat(13, 1fr); gap: 2px; min-width: 480px; }
+  .matrix-container { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .matrix { display: grid; grid-template-columns: repeat(13, 1fr); gap: 2px; min-width: 340px; }
+  @media (max-width: 480px) {
+    .matrix { gap: 1px; min-width: 280px; }
+    .cell { font-size: 0.52rem; }
+  }
 
   .cell {
     aspect-ratio: 1; display: flex; align-items: center; justify-content: center;
-    font-size: 0.80rem; border-radius: 3px; cursor: pointer;
+    font-size: 0.62rem; font-weight: 700; border-radius: 3px; cursor: pointer;
     transition: transform 0.1s; border: 1px solid transparent;
     background: rgba(255,255,255,0.02); color: var(--text-dim); user-select: none;
   }
@@ -128,7 +132,7 @@
   .cell.pair.coldcall  { background: rgba(30,90,180,0.75); color: #88c0ff; }
 
   .legend { display: flex; gap: 12px; margin-top: 10px; flex-wrap: wrap; }
-  .legend-item { display: flex; align-items: center; gap: 5px; font-size: 0.60rem; letter-spacing: 1px; color: var(--text-dim); }
+  .legend-item { display: flex; align-items: center; gap: 5px; font-size: 0.52rem; letter-spacing: 1px; color: var(--text-dim); }
   .legend-dot { width: 9px; height: 9px; border-radius: 2px; }
 
   /* SIDEBAR */
@@ -187,6 +191,20 @@
   .filter-btn.off { opacity: 0.25; }
 
   @media (max-width: 860px) { .main { grid-template-columns: 1fr; } }
+  @media (max-width: 560px) {
+    .tabs-wrapper { gap: 10px; }
+    .tab { font-size: 0.52rem; padding: 7px 10px; letter-spacing: 0.5px; }
+    .tab-group-label { font-size: 0.44rem; }
+    .app { padding: 8px; }
+    header { padding: 10px 12px; }
+    .logo { font-size: 1rem; }
+    .range-panel { padding: 10px; }
+    .sidebar { gap: 8px; }
+    .info-card { padding: 10px; }
+    .stats-grid { grid-template-columns: 1fr 1fr; }
+    .stat-number { font-size: 0.95rem; }
+    .position-grid { grid-template-columns: repeat(3, 1fr); gap: 4px; }
+  }
 </style>
 </head>
 <body>
@@ -406,6 +424,31 @@ const OR_RANGES = {
     '65o':'or','64o':'or','63o':'','62o':'',
     '54o':'or','53o':'','52o':'','43o':'or','42o':'','32o':'or',
   },
+  // ─── BB OPEN RAISE (vs limp, iso, or cold) ───────────────────────────────────
+  // BB defends and isolates: wide calling range vs BTN/SB, tighter vs UTG/MP
+  BB: {
+    'AA':'4bet','KK':'4bet','QQ':'4bet','JJ':'call-3b','TT':'call-3b','99':'call-3b','88':'or','77':'or','66':'or','55':'or','44':'or','33':'or','22':'or',
+    'AKs':'4bet','AQs':'4bet','AJs':'call-3b','ATs':'call-3b','A9s':'call-3b','A8s':'call-3b','A7s':'call-3b','A6s':'or','A5s':'bluff-4b','A4s':'or','A3s':'or','A2s':'or',
+    'KQs':'call-3b','KJs':'call-3b','KTs':'call-3b','K9s':'or','K8s':'or','K7s':'or','K6s':'or','K5s':'or','K4s':'or','K3s':'or','K2s':'or',
+    'QJs':'call-3b','QTs':'call-3b','Q9s':'or','Q8s':'or','Q7s':'or','Q6s':'or','Q5s':'or','Q4s':'or','Q3s':'or','Q2s':'or',
+    'JTs':'call-3b','J9s':'or','J8s':'or','J7s':'or','J6s':'or','J5s':'or','J4s':'or','J3s':'','J2s':'',
+    'T9s':'or','T8s':'or','T7s':'or','T6s':'or','T5s':'or','T4s':'or','T3s':'','T2s':'',
+    '98s':'or','97s':'or','96s':'or','95s':'or','94s':'or','93s':'or','92s':'',
+    '87s':'or','86s':'or','85s':'or','84s':'or','83s':'','82s':'',
+    '76s':'or','75s':'or','74s':'or','73s':'','72s':'',
+    '65s':'or','64s':'or','63s':'or','62s':'',
+    '54s':'or','53s':'or','52s':'','43s':'or','42s':'','32s':'',
+    'AKo':'call-3b','AQo':'call-3b','AJo':'call-3b','ATo':'call-3b','A9o':'or','A8o':'or','A7o':'or','A6o':'or','A5o':'or','A4o':'or','A3o':'or','A2o':'or',
+    'KQo':'call-3b','KJo':'call-3b','KTo':'or','K9o':'or','K8o':'or','K7o':'or','K6o':'or','K5o':'or','K4o':'','K3o':'','K2o':'',
+    'QJo':'call-3b','QTo':'or','Q9o':'or','Q8o':'or','Q7o':'or','Q6o':'or','Q5o':'','Q4o':'','Q3o':'','Q2o':'',
+    'JTo':'or','J9o':'or','J8o':'or','J7o':'or','J6o':'','J5o':'','J4o':'','J3o':'','J2o':'',
+    'T9o':'or','T8o':'or','T7o':'or','T6o':'','T5o':'','T4o':'','T3o':'','T2o':'',
+    '98o':'or','97o':'or','96o':'or','95o':'','94o':'','93o':'','92o':'',
+    '87o':'or','86o':'or','85o':'','84o':'','83o':'','82o':'',
+    '76o':'or','75o':'or','74o':'','73o':'','72o':'',
+    '65o':'or','64o':'or','63o':'','62o':'',
+    '54o':'or','53o':'','52o':'','43o':'','42o':'','32o':'',
+  },
 };
 
 // ─── 3BET / COLD CALL RANGES ─────────────────────────────────────────────────
@@ -530,7 +573,7 @@ const THREEBET_RANGES = {
 // ─── CONFIG PER MODE ─────────────────────────────────────────────────────────
 const MODE_CONFIG = {
   OR: {
-    positions: ['UTG','MP','CO','BU','SB'],
+    positions: ['UTG','MP','CO','BU','SB','BB'],
     posLabel: 'Posición de apertura',
     defaultPos: 'UTG',
     statLabels: ['COMBOS OR','CALL 3BET','4BET VALUE','4BET BLUFF'],
@@ -580,7 +623,7 @@ const MODE_CONFIG = {
 };
 
 const POS_DISPLAY = {
-  UTG:'UTG', MP:'MP', CO:'CO', BU:'BU', SB:'SB',
+  UTG:'UTG', MP:'MP', CO:'CO', BU:'BU', SB:'SB', BB:'BB',
   vsUTGMP:'vs UTG-MP', vsCOBU:'vs CO-BU',
   BBvsUTGMP:'BB vs UTG-MP', BBvsCOBUSB:'BB vs CO-BU-SB',
 };
@@ -1219,16 +1262,57 @@ function formatStudyText(text) {
 // ─── QUIZ ENGINE ──────────────────────────────────────────────────────────────
 
 const QUIZ_MODES = [
-  { id: 'or-all',    label: 'Open Raise (todas)',    desc: 'UTG → SB' },
-  { id: 'or-tight',  label: 'OR Tempranas',          desc: 'UTG / MP' },
-  { id: 'or-late',   label: 'OR Tardías',            desc: 'CO / BU / SB' },
-  { id: '3bet-ip',   label: '3Bet IP',               desc: 'vs UTG-MP / vs CO-BU' },
-  { id: '3bet-bb',   label: '3Bet desde BB',         desc: 'BB vs UTG-MP / CO-BU-SB' },
-  { id: 'all',       label: '🔀 Todo mezclado',      desc: 'Preflop completo' },
+  { id: 'or-all',    label: 'Open Raise (todas)',    desc: 'UTG / MP / CO / BU / SB / BB', group: 'OR' },
+  { id: 'or-utg',    label: 'OR · UTG',              desc: 'Solo UTG',                      group: 'OR' },
+  { id: 'or-mp',     label: 'OR · MP',               desc: 'Solo MP',                       group: 'OR' },
+  { id: 'or-co',     label: 'OR · CO',               desc: 'Solo CO',                       group: 'OR' },
+  { id: 'or-bu',     label: 'OR · BU',               desc: 'Solo BU (BTN)',                 group: 'OR' },
+  { id: 'or-sb',     label: 'OR · SB',               desc: 'Solo SB',                       group: 'OR' },
+  { id: 'or-bb',     label: 'OR · BB',               desc: 'Solo BB',                       group: 'OR' },
+  { id: 'or-tight',  label: 'OR Tempranas',           desc: 'UTG / MP',                      group: 'OR' },
+  { id: 'or-late',   label: 'OR Tardías',             desc: 'CO / BU / SB',                  group: 'OR' },
+  { id: '3bet-ip',   label: '3Bet IP',               desc: 'vs UTG-MP / vs CO-BU',          group: '3BET' },
+  { id: '3bet-bb',   label: '3Bet desde BB',         desc: 'BB vs UTG-MP / CO-BU-SB',       group: '3BET' },
+  { id: 'all',       label: '🔀 Todo mezclado',      desc: 'Preflop completo',               group: 'ALL' },
 ];
 
 const SUIT_CHARS = ['♠','♥','♦','♣'];
 const SUIT_COLORS = { '♠':'#88c8ff', '♥':'#ff8888', '♦':'#ff8888', '♣':'#88c8ff' };
+
+// ─── QUIZ PERSISTENT ERROR TRACKER ───────────────────────────────────────────
+const QUIZ_LS_KEY = 'nl2_quiz_errors';
+function loadErrorTracker() {
+  try { return JSON.parse(localStorage.getItem(QUIZ_LS_KEY) || '{}'); }
+  catch(e) { return {}; }
+}
+function saveErrorTracker(tracker) {
+  try { localStorage.setItem(QUIZ_LS_KEY, JSON.stringify(tracker)); } catch(e) {}
+}
+function recordError(hand, pos, isCorrect) {
+  const tracker = loadErrorTracker();
+  const key = hand + '|' + pos;
+  if (!tracker[key]) tracker[key] = { errors: 0, attempts: 0, lastWrong: null };
+  tracker[key].attempts++;
+  if (!isCorrect) { tracker[key].errors++; tracker[key].lastWrong = Date.now(); }
+  saveErrorTracker(tracker);
+}
+function getErrorWeight(hand, pos) {
+  const tracker = loadErrorTracker();
+  const key = hand + '|' + pos;
+  const e = tracker[key];
+  if (!e || e.attempts === 0) return 1;
+  const errorRate = e.errors / e.attempts;
+  const recency = e.lastWrong ? Math.max(1, 1 - (Date.now() - e.lastWrong) / (1000*60*60*24)) : 0;
+  return 1 + Math.round(errorRate * 5 * recency + errorRate * 3);
+}
+function getTopErrors(limit = 5) {
+  const tracker = loadErrorTracker();
+  return Object.entries(tracker)
+    .filter(([,e]) => e.errors > 0)
+    .map(([key, e]) => ({ hand: key.split('|')[0], pos: key.split('|')[1], ...e, rate: e.errors/e.attempts }))
+    .sort((a,b) => b.rate - a.rate || b.errors - a.errors)
+    .slice(0, limit);
+}
 
 let quizState = {
   mode: 'or-all',
@@ -1270,11 +1354,16 @@ function buildQuizPool(mode) {
       pool.push({ hand, pos, correctAnswer: action || 'fold', rangeLabel });
     }
   };
-  if (['or-all','or-tight','all'].includes(mode)) {
-    const positions = mode === 'or-tight' ? ['UTG','MP'] : ['UTG','MP','CO','BU','SB'];
-    positions.forEach(p => addFromRange(OR_RANGES[p], p, 'OR'));
-  }
-  if (mode === 'or-late') ['CO','BU','SB'].forEach(p => addFromRange(OR_RANGES[p], p, 'OR'));
+  // Per-position OR drills
+  if (mode === 'or-utg') addFromRange(OR_RANGES['UTG'], 'UTG', 'OR');
+  else if (mode === 'or-mp') addFromRange(OR_RANGES['MP'], 'MP', 'OR');
+  else if (mode === 'or-co') addFromRange(OR_RANGES['CO'], 'CO', 'OR');
+  else if (mode === 'or-bu') addFromRange(OR_RANGES['BU'], 'BU', 'OR');
+  else if (mode === 'or-sb') addFromRange(OR_RANGES['SB'], 'SB', 'OR');
+  else if (mode === 'or-bb') addFromRange(OR_RANGES['BB'], 'BB', 'OR');
+  else if (mode === 'or-tight') ['UTG','MP'].forEach(p => addFromRange(OR_RANGES[p], p, 'OR'));
+  else if (mode === 'or-late') ['CO','BU','SB'].forEach(p => addFromRange(OR_RANGES[p], p, 'OR'));
+  else if (['or-all','all'].includes(mode)) ['UTG','MP','CO','BU','SB','BB'].forEach(p => addFromRange(OR_RANGES[p], p, 'OR'));
   if (['3bet-ip','all'].includes(mode)) ['vsUTGMP','vsCOBU'].forEach(p => addFromRange(THREEBET_RANGES[p], p, '3BET'));
   if (['3bet-bb','all'].includes(mode)) ['BBvsUTGMP','BBvsCOBUSB'].forEach(p => addFromRange(THREEBET_RANGES[p], p, '3BET'));
   return pool;
@@ -1283,8 +1372,12 @@ function buildQuizPool(mode) {
 function pickQuestion(mode) {
   const pool = buildQuizPool(mode);
   const weights = pool.map(q => {
+    // Persistent tracker weight (main driver)
+    const persW = getErrorWeight(q.hand, q.pos);
+    // Recent session history boost
     const hist = quizState.history.filter(h => h.hand === q.hand && h.pos === q.pos);
-    return (hist.length > 0 && !hist[hist.length-1].correct) ? 4 : 1;
+    const recW = (hist.length > 0 && !hist[hist.length-1].correct) ? 2 : 0;
+    return persW + recW;
   });
   const total = weights.reduce((a,b) => a+b, 0);
   let r = Math.random() * total;
@@ -1308,7 +1401,7 @@ function getAnswerButtons(q) {
 }
 
 function posDisplayShort(pos) {
-  return { UTG:'UTG', MP:'MP', CO:'CO', BU:'BU', SB:'SB',
+  return { UTG:'UTG', MP:'MP', CO:'CO', BU:'BU', SB:'SB', BB:'BB',
     vsUTGMP:'vs UTG-MP', vsCOBU:'vs CO-BU',
     BBvsUTGMP:'BB vs UTG-MP', BBvsCOBUSB:'BB vs CO-BU-SB' }[pos] || pos;
 }
@@ -1322,8 +1415,8 @@ function initQuiz() {
   const panel = document.getElementById('quiz-panel');
   panel.innerHTML = `
 <style>
-  .quiz-wrap { max-width: 640px; margin: 0 auto; }
-  .quiz-header-row { display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; flex-wrap:wrap; gap:10px; }
+  .quiz-wrap { max-width: 700px; margin: 0 auto; }
+  .quiz-header-row { display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; flex-wrap:wrap; gap:10px; }
   .quiz-logo { font-family:'Orbitron',sans-serif; font-size:1.05rem; font-weight:900; background:linear-gradient(90deg,#ff7b00,#ffd700); -webkit-background-clip:text; -webkit-text-fill-color:transparent; letter-spacing:3px; }
   .quiz-logo-sub { font-size:0.52rem; letter-spacing:3px; color:var(--text-dim); margin-top:2px; }
   .quiz-scorebar { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
@@ -1333,10 +1426,25 @@ function initQuiz() {
   .score-streak  { background:rgba(255,215,0,0.1);  color:#ffd700; border:1px solid rgba(255,215,0,0.3); }
   .score-pct     { background:rgba(0,255,204,0.1);  color:var(--neon-cyan); border:1px solid rgba(0,255,204,0.3); }
 
-  .quiz-mode-select { display:flex; gap:5px; flex-wrap:wrap; margin-bottom:16px; }
-  .quiz-mode-btn { font-family:'Orbitron',sans-serif; font-size:0.52rem; letter-spacing:1px; padding:6px 10px; border-radius:6px; border:1px solid var(--border); background:var(--surface); color:var(--text-dim); cursor:pointer; transition:all 0.2s; line-height:1.5; }
+  /* Progress bar */
+  .quiz-progress-bar-wrap { margin-bottom:14px; background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:10px 14px; }
+  .qpb-row { display:flex; align-items:center; gap:10px; margin-bottom:6px; }
+  .qpb-label { font-family:'Orbitron',sans-serif; font-size:0.5rem; letter-spacing:2px; color:var(--text-dim); white-space:nowrap; }
+  .qpb-bar-bg { flex:1; height:6px; background:rgba(255,255,255,0.06); border-radius:3px; overflow:hidden; }
+  .qpb-bar-fill { height:100%; border-radius:3px; background:linear-gradient(90deg,#ff7b00,#ffd700); transition:width 0.4s; }
+  .qpb-streak-row { display:flex; gap:4px; align-items:center; }
+  .qpb-streak-dot { width:8px; height:8px; border-radius:50%; background:var(--border); transition:background 0.2s; }
+  .qpb-streak-dot.lit { background:#ffd700; box-shadow:0 0 6px rgba(255,215,0,0.6); }
+  .qpb-streak-dot.best { background:#ff7b00; box-shadow:0 0 6px rgba(255,123,0,0.5); }
+  .qpb-info { font-family:'Orbitron',sans-serif; font-size:0.5rem; color:var(--text-dim); margin-left:6px; letter-spacing:1px; }
+
+  /* Mode selector grouped */
+  .quiz-mode-outer { margin-bottom:14px; }
+  .quiz-mode-group-label { font-family:'Orbitron',sans-serif; font-size:0.44rem; letter-spacing:3px; color:var(--text-dim); margin-bottom:5px; margin-top:8px; }
+  .quiz-mode-row { display:flex; gap:5px; flex-wrap:wrap; }
+  .quiz-mode-btn { font-family:'Orbitron',sans-serif; font-size:0.5rem; letter-spacing:1px; padding:6px 10px; border-radius:6px; border:1px solid var(--border); background:var(--surface); color:var(--text-dim); cursor:pointer; transition:all 0.2s; line-height:1.5; }
   .quiz-mode-btn:hover { border-color:#ff7b00; color:#ff7b00; }
-  .quiz-mode-btn.active { border-color:#ffd700; color:#ffd700; background:rgba(255,215,0,0.07); }
+  .quiz-mode-btn.active { border-color:#ffd700; color:#ffd700; background:rgba(255,215,0,0.07); box-shadow:0 0 10px rgba(255,215,0,0.1); }
 
   .quiz-card { background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:26px 22px; text-align:center; margin-bottom:14px; position:relative; overflow:hidden; transition:border-color 0.25s, box-shadow 0.25s; }
   .quiz-card::before { content:''; position:absolute; top:0; left:0; right:0; height:2px; background:linear-gradient(90deg,transparent,#ff7b00,#ffd700,transparent); }
@@ -1363,14 +1471,30 @@ function initQuiz() {
   .quiz-next-btn { font-family:'Orbitron',sans-serif; font-size:0.68rem; font-weight:700; letter-spacing:3px; padding:12px 30px; border-radius:8px; border:none; background:linear-gradient(135deg,#ff7b00,#ffd700); color:#070b14; cursor:pointer; margin-top:12px; transition:all 0.2s; display:none; width:100%; }
   .quiz-next-btn:hover { filter:brightness(1.1); transform:translateY(-1px); }
 
+  /* Bottom row: history + errors */
+  .quiz-bottom-row { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  @media(max-width:560px){ .quiz-bottom-row{ grid-template-columns:1fr; } }
+
   .quiz-history { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:13px; }
   .quiz-history-title { font-family:'Orbitron',sans-serif; font-size:0.52rem; letter-spacing:3px; color:var(--text-dim); margin-bottom:9px; }
   .quiz-hist-item { display:flex; align-items:center; gap:8px; font-size:0.58rem; padding:5px 7px; border-radius:5px; background:rgba(0,0,0,0.18); margin-bottom:3px; }
   .hist-dot { width:7px; height:7px; border-radius:50%; flex-shrink:0; }
-  .hist-hand { font-family:'Orbitron',sans-serif; font-size:0.6rem; color:var(--text); min-width:55px; }
-  .hist-pos  { color:var(--text-dim); font-size:0.53rem; min-width:85px; }
-  .hist-ans  { font-size:0.56rem; flex:1; }
+  .hist-hand { font-family:'Orbitron',sans-serif; font-size:0.6rem; color:var(--text); min-width:42px; }
+  .hist-pos  { color:var(--text-dim); font-size:0.52rem; min-width:40px; }
+  .hist-ans  { font-size:0.54rem; flex:1; }
   .quiz-empty { font-size:0.58rem; color:var(--text-dim); text-align:center; padding:8px 0; letter-spacing:1px; }
+
+  /* Error tracker panel */
+  .quiz-errors { background:var(--surface); border:1px solid rgba(255,34,68,0.22); border-radius:10px; padding:13px; }
+  .quiz-errors-title { font-family:'Orbitron',sans-serif; font-size:0.52rem; letter-spacing:3px; color:#ff6688; margin-bottom:9px; }
+  .err-item { display:flex; align-items:center; gap:8px; font-size:0.58rem; padding:5px 7px; border-radius:5px; background:rgba(255,34,68,0.05); border:1px solid rgba(255,34,68,0.1); margin-bottom:3px; }
+  .err-hand { font-family:'Orbitron',sans-serif; font-size:0.6rem; color:#ff8899; min-width:42px; }
+  .err-pos  { color:var(--text-dim); font-size:0.52rem; min-width:40px; }
+  .err-rate { font-family:'Orbitron',sans-serif; font-size:0.62rem; font-weight:700; color:#ff4466; min-width:32px; text-align:right; }
+  .err-bar  { flex:1; height:3px; background:rgba(255,34,68,0.15); border-radius:2px; overflow:hidden; }
+  .err-bar-fill { height:100%; background:linear-gradient(90deg,#ff2244,#ff7788); border-radius:2px; }
+  .err-clear-btn { font-family:'Orbitron',sans-serif; font-size:0.44rem; letter-spacing:1px; padding:3px 8px; border-radius:5px; border:1px solid rgba(255,34,68,0.3); background:rgba(255,34,68,0.08); color:#ff6688; cursor:pointer; margin-top:8px; float:right; }
+  .err-clear-btn:hover { background:rgba(255,34,68,0.18); }
 </style>
 
 <div class="quiz-wrap">
@@ -1387,7 +1511,31 @@ function initQuiz() {
     </div>
   </div>
 
-  <div class="quiz-mode-select" id="quiz-mode-select"></div>
+  <!-- PROGRESS BAR + STREAK DOTS -->
+  <div class="quiz-progress-bar-wrap">
+    <div class="qpb-row">
+      <div class="qpb-label">PRECISIÓN</div>
+      <div class="qpb-bar-bg"><div class="qpb-bar-fill" id="q-pbar" style="width:0%"></div></div>
+      <div class="qpb-label" id="q-pct-bar">0%</div>
+    </div>
+    <div class="qpb-row" style="margin-bottom:0">
+      <div class="qpb-label">RACHA</div>
+      <div class="qpb-streak-row" id="q-streak-dots">
+        ${Array.from({length:10},(_,i)=>`<div class="qpb-streak-dot" id="sdot-${i}"></div>`).join('')}
+      </div>
+      <div class="qpb-info" id="q-best-streak">MEJOR: 0</div>
+    </div>
+  </div>
+
+  <!-- MODE SELECTOR GROUPED -->
+  <div class="quiz-mode-outer">
+    <div class="quiz-mode-group-label">OPEN RAISE — TODAS LAS POSICIONES</div>
+    <div class="quiz-mode-row" id="qmg-or"></div>
+    <div class="quiz-mode-group-label">3BET / COLD CALL</div>
+    <div class="quiz-mode-row" id="qmg-3bet"></div>
+    <div class="quiz-mode-group-label">ESPECIALES</div>
+    <div class="quiz-mode-row" id="qmg-all"></div>
+  </div>
 
   <div class="quiz-card" id="quiz-card">
     <div class="quiz-pos-badge" id="q-pos-badge">—</div>
@@ -1399,15 +1547,24 @@ function initQuiz() {
     <button class="quiz-next-btn" id="q-next">SIGUIENTE MANO →</button>
   </div>
 
-  <div class="quiz-history">
-    <div class="quiz-history-title">ÚLTIMAS RESPUESTAS</div>
-    <div id="quiz-history-list"><div class="quiz-empty">Aún no hay respuestas</div></div>
+  <div class="quiz-bottom-row">
+    <div class="quiz-history">
+      <div class="quiz-history-title">ÚLTIMAS RESPUESTAS</div>
+      <div id="quiz-history-list"><div class="quiz-empty">Aún no hay respuestas</div></div>
+    </div>
+    <div class="quiz-errors">
+      <div class="quiz-errors-title">⚠️ ERRORES FRECUENTES</div>
+      <div id="quiz-errors-list"><div class="quiz-empty">Sin errores registrados</div></div>
+      <button class="err-clear-btn" id="q-clear-errors">Resetear</button>
+    </div>
   </div>
 </div>`;
 
-  // Mode buttons
-  const modeSelect = panel.querySelector('#quiz-mode-select');
+  // Mode buttons grouped
+  const groups = { OR: 'qmg-or', '3BET': 'qmg-3bet', ALL: 'qmg-all' };
   QUIZ_MODES.forEach(m => {
+    const container = panel.querySelector('#' + groups[m.group]);
+    if (!container) return;
     const btn = document.createElement('button');
     btn.className = 'quiz-mode-btn' + (m.id === quizState.mode ? ' active' : '');
     btn.innerHTML = `${m.label}<span style="display:block;font-size:0.42rem;opacity:0.55;font-family:monospace;margin-top:1px">${m.desc}</span>`;
@@ -1417,10 +1574,17 @@ function initQuiz() {
       btn.classList.add('active');
       nextQuestion();
     });
-    modeSelect.appendChild(btn);
+    container.appendChild(btn);
   });
 
   panel.querySelector('#q-next').addEventListener('click', nextQuestion);
+  panel.querySelector('#q-clear-errors').addEventListener('click', () => {
+    if (confirm('¿Resetear el historial de errores? Esto reinicia el tracker de manos problemáticas.')) {
+      localStorage.removeItem(QUIZ_LS_KEY);
+      renderErrorPanel();
+    }
+  });
+  renderErrorPanel();
   nextQuestion();
 }
 
@@ -1488,12 +1652,40 @@ function handleAnswer(chosen) {
     quizState.score.streak = 0;
   }
 
+  // Persistent error tracker
+  recordError(q.hand, q.pos, correct);
+
   const total = quizState.score.correct + quizState.score.wrong;
   const pct = total > 0 ? Math.round(quizState.score.correct / total * 100) : 0;
   panel.querySelector('#q-correct').textContent = quizState.score.correct;
   panel.querySelector('#q-wrong').textContent = quizState.score.wrong;
   panel.querySelector('#q-streak').textContent = quizState.score.streak;
   panel.querySelector('#q-pct').textContent = pct + ' %';
+
+  // Progress bar update
+  const pbar = panel.querySelector('#q-pbar');
+  if (pbar) {
+    pbar.style.width = pct + '%';
+    pbar.style.background = pct >= 80 ? 'linear-gradient(90deg,#39ff14,#00ffcc)' :
+                             pct >= 60 ? 'linear-gradient(90deg,#ff7b00,#ffd700)' :
+                             'linear-gradient(90deg,#ff2244,#ff7b00)';
+  }
+  const pctBar = panel.querySelector('#q-pct-bar');
+  if (pctBar) pctBar.textContent = pct + '%';
+
+  // Streak dots
+  const streakNow = quizState.score.streak;
+  const best = quizState.score.bestStreak;
+  for (let i = 0; i < 10; i++) {
+    const dot = panel.querySelector(`#sdot-${i}`);
+    if (dot) {
+      dot.classList.remove('lit', 'best');
+      if (i < streakNow) dot.classList.add('lit');
+      else if (i < best && streakNow === 0) dot.classList.add('best');
+    }
+  }
+  const bestEl = panel.querySelector('#q-best-streak');
+  if (bestEl) bestEl.textContent = 'MEJOR: ' + best;
 
   // Flash
   panel.querySelector('#quiz-card').classList.add(correct ? 'correct-flash' : 'wrong-flash');
@@ -1523,6 +1715,7 @@ function handleAnswer(chosen) {
   quizState.history.unshift({ hand: q.hand, pos: q.pos, correct, chosen, rightAnswer: q.correctAnswer });
   if (quizState.history.length > 8) quizState.history.pop();
   renderQuizHistory();
+  renderErrorPanel();
 
   panel.querySelector('#q-next').style.display = 'block';
 }
@@ -1545,6 +1738,24 @@ function renderQuizHistory() {
           ? ACTION_LABELS[h.rightAnswer]
           : `${ACTION_LABELS[h.chosen] || 'Fold'} → ${ACTION_LABELS[h.rightAnswer]}`}
       </div>
+    </div>`).join('');
+}
+
+function renderErrorPanel() {
+  const panel = document.getElementById('quiz-panel');
+  const list = panel ? panel.querySelector('#quiz-errors-list') : null;
+  if (!list) return;
+  const errors = getTopErrors(6);
+  if (errors.length === 0) {
+    list.innerHTML = '<div class="quiz-empty">Sin errores registrados 🎯</div>';
+    return;
+  }
+  list.innerHTML = errors.map(e => `
+    <div class="err-item">
+      <div class="err-hand">${e.hand}</div>
+      <div class="err-pos">${posDisplayShort(e.pos)}</div>
+      <div class="err-bar"><div class="err-bar-fill" style="width:${Math.round(e.rate*100)}%"></div></div>
+      <div class="err-rate">${Math.round(e.rate*100)}%</div>
     </div>`).join('');
 }
 
