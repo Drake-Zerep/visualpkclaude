@@ -5,6 +5,79 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>NL2 Range Viewer</title>
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<!-- Firebase SDK (compat v9) -->
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+<script>
+  const firebaseConfig = {
+    apiKey: "AIzaSyCguHKqvnArs7Q7Ihhlr3imXaSNrXKY7CQ",
+    authDomain: "nl2-poker-tracker.firebaseapp.com",
+    databaseURL: "https://nl2-poker-tracker-default-rtdb.europe-west1.firebasedatabase.app",
+    projectId: "nl2-poker-tracker",
+    storageBucket: "nl2-poker-tracker.firebasestorage.app",
+    messagingSenderId: "50286372374",
+    appId: "1:50286372374:web:5a8f6ddd7a61732686b737"
+  };
+  firebase.initializeApp(firebaseConfig);
+  const db = firebase.database();
+  const ERRORS_REF = db.ref('quiz_errors');
+
+  // ── Firebase error tracker API ──────────────────────────────────────────────
+  // In-memory cache so UI never blocks on network
+  let _fbCache = {};
+  let _fbLoaded = false;
+
+  // Load all errors once on init, keep in sync with onValue
+  ERRORS_REF.on('value', snap => {
+    _fbCache = snap.val() || {};
+    _fbLoaded = true;
+    // Refresh error panel if quiz is open
+    if (document.getElementById('quiz-errors-list')) renderErrorPanel();
+  });
+
+  function _safeKey(hand, pos) {
+    // Firebase keys can't contain . $ # [ ] /
+    return (hand + '__' + pos).replace(/[.$#[\]/]/g, '_');
+  }
+
+  function recordError(hand, pos, isCorrect) {
+    const key = _safeKey(hand, pos);
+    const current = _fbCache[key] || { errors: 0, attempts: 0, lastWrong: null };
+    const updated = {
+      hand,
+      pos,
+      errors: current.errors + (isCorrect ? 0 : 1),
+      attempts: current.attempts + 1,
+      lastWrong: isCorrect ? (current.lastWrong || null) : Date.now(),
+    };
+    _fbCache[key] = updated;  // optimistic update
+    ERRORS_REF.child(key).set(updated);
+  }
+
+  function getErrorWeight(hand, pos) {
+    const key = _safeKey(hand, pos);
+    const e = _fbCache[key];
+    if (!e || e.attempts === 0) return 1;
+    const errorRate = e.errors / e.attempts;
+    const recency = e.lastWrong
+      ? Math.max(0, 1 - (Date.now() - e.lastWrong) / (1000 * 60 * 60 * 24 * 7))
+      : 0;
+    return 1 + Math.round(errorRate * 5 * recency + errorRate * 3);
+  }
+
+  function getTopErrors(limit = 6) {
+    return Object.values(_fbCache)
+      .filter(e => e.errors > 0 && e.attempts > 0)
+      .map(e => ({ ...e, rate: e.errors / e.attempts }))
+      .sort((a, b) => b.rate - a.rate || b.errors - a.errors)
+      .slice(0, limit);
+  }
+
+  function clearErrorTracker() {
+    _fbCache = {};
+    ERRORS_REF.remove();
+  }
+</script>
 <style>
   :root {
     --bg: #070b14;
@@ -104,7 +177,7 @@
 
   .cell {
     aspect-ratio: 1; display: flex; align-items: center; justify-content: center;
-    font-size: 0.80rem; font-weight: 700; border-radius: 3px; cursor: pointer;
+    font-size: 0.62rem; font-weight: 700; border-radius: 3px; cursor: pointer;
     transition: transform 0.1s; border: 1px solid transparent;
     background: rgba(255,255,255,0.02); color: var(--text-dim); user-select: none;
   }
@@ -1279,40 +1352,7 @@ const QUIZ_MODES = [
 const SUIT_CHARS = ['♠','♥','♦','♣'];
 const SUIT_COLORS = { '♠':'#88c8ff', '♥':'#ff8888', '♦':'#ff8888', '♣':'#88c8ff' };
 
-// ─── QUIZ PERSISTENT ERROR TRACKER ───────────────────────────────────────────
-const QUIZ_LS_KEY = 'nl2_quiz_errors';
-function loadErrorTracker() {
-  try { return JSON.parse(localStorage.getItem(QUIZ_LS_KEY) || '{}'); }
-  catch(e) { return {}; }
-}
-function saveErrorTracker(tracker) {
-  try { localStorage.setItem(QUIZ_LS_KEY, JSON.stringify(tracker)); } catch(e) {}
-}
-function recordError(hand, pos, isCorrect) {
-  const tracker = loadErrorTracker();
-  const key = hand + '|' + pos;
-  if (!tracker[key]) tracker[key] = { errors: 0, attempts: 0, lastWrong: null };
-  tracker[key].attempts++;
-  if (!isCorrect) { tracker[key].errors++; tracker[key].lastWrong = Date.now(); }
-  saveErrorTracker(tracker);
-}
-function getErrorWeight(hand, pos) {
-  const tracker = loadErrorTracker();
-  const key = hand + '|' + pos;
-  const e = tracker[key];
-  if (!e || e.attempts === 0) return 1;
-  const errorRate = e.errors / e.attempts;
-  const recency = e.lastWrong ? Math.max(1, 1 - (Date.now() - e.lastWrong) / (1000*60*60*24)) : 0;
-  return 1 + Math.round(errorRate * 5 * recency + errorRate * 3);
-}
-function getTopErrors(limit = 5) {
-  const tracker = loadErrorTracker();
-  return Object.entries(tracker)
-    .filter(([,e]) => e.errors > 0)
-    .map(([key, e]) => ({ hand: key.split('|')[0], pos: key.split('|')[1], ...e, rate: e.errors/e.attempts }))
-    .sort((a,b) => b.rate - a.rate || b.errors - a.errors)
-    .slice(0, limit);
-}
+// ─── QUIZ PERSISTENT ERROR TRACKER → Firebase (ver head) ─────────────────────
 
 let quizState = {
   mode: 'or-all',
@@ -1502,6 +1542,7 @@ function initQuiz() {
     <div>
       <div class="quiz-logo">⚡ MODO QUIZ</div>
       <div class="quiz-logo-sub">ENTRENAMIENTO PREFLOP · NL2</div>
+      <div id="fb-status" style="font-size:0.48rem;letter-spacing:1px;color:var(--text-dim);margin-top:3px">🔄 Conectando Firebase...</div>
     </div>
     <div class="quiz-scorebar">
       <div class="quiz-score-pill score-correct">✓ <span id="q-correct">0</span></div>
@@ -1579,8 +1620,8 @@ function initQuiz() {
 
   panel.querySelector('#q-next').addEventListener('click', nextQuestion);
   panel.querySelector('#q-clear-errors').addEventListener('click', () => {
-    if (confirm('¿Resetear el historial de errores? Esto reinicia el tracker de manos problemáticas.')) {
-      localStorage.removeItem(QUIZ_LS_KEY);
+    if (confirm('¿Resetear el historial de errores? Esto borrará los datos en Firebase.')) {
+      clearErrorTracker();
       renderErrorPanel();
     }
   });
@@ -1744,10 +1785,20 @@ function renderQuizHistory() {
 function renderErrorPanel() {
   const panel = document.getElementById('quiz-panel');
   const list = panel ? panel.querySelector('#quiz-errors-list') : null;
+
+  // Update Firebase status badge
+  const badge = panel ? panel.querySelector('#fb-status') : null;
+  if (badge) {
+    badge.textContent = _fbLoaded
+      ? `☁️ Firebase · ${Object.keys(_fbCache).length} manos registradas`
+      : '🔄 Conectando Firebase...';
+    badge.style.color = _fbLoaded ? '#39ff14' : 'var(--text-dim)';
+  }
+
   if (!list) return;
   const errors = getTopErrors(6);
   if (errors.length === 0) {
-    list.innerHTML = '<div class="quiz-empty">Sin errores registrados 🎯</div>';
+    list.innerHTML = '<div class="quiz-empty">' + (_fbLoaded ? 'Sin errores registrados 🎯' : '⏳ Cargando...') + '</div>';
     return;
   }
   list.innerHTML = errors.map(e => `
